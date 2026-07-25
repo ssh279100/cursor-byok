@@ -25,6 +25,16 @@ vars:
   CURRENT_LINUX_NAME: "linux-amd64"
 
 tasks:
+  # GitHub Actions 专用：直接出 exe，不依赖 zip、也不删除产物
+  ci:windows:
+    summary: CI 构建 Windows amd64 exe
+    cmds:
+      - task: clean:dist
+      - task: windows:build
+        vars:
+          ARCH: amd64
+          OUTPUT: '{{.BIN_DIR}}/windows-64.exe'
+
   build:
     summary: 构建当前系统分发包
     preconditions:
