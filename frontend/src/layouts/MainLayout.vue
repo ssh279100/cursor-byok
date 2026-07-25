@@ -1,23 +1,15 @@
 <script setup>
-import { Browser, Window } from "@wailsio/runtime";
+import { Window } from "@wailsio/runtime";
 import LocaleSelect from "@/components/LocaleSelect.vue";
 import { useMessage } from "@/composables/useMessage";
-import { showModal } from "@/composables/useModal";
-import {
-  getFooterAuthorInfo,
-  openFooterAuthorHome,
-} from "@/services/clientApi";
-import {
-  appState,
-  checkForAppUpdates,
-  syncServiceState,
-  updateViewState,
-} from "@/state/appState";
+import { appState, syncServiceState } from "@/state/appState";
 import { isWindows } from "@/utils/isWindows";
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
-import { useLocale } from "@/i18n/runtime";
+import copyTextToClipboard from "copy-text-to-clipboard";
 import Logo from "@/assets/logo.png";
+
+const CONTACT_QQ = "279100273";
 
 const route = useRoute();
 const message = useMessage();
@@ -25,32 +17,7 @@ const showIcon = computed(() => route.meta.showIcon !== false);
 const title = computed(() => route.meta.title ?? "Cursor助手｜永久免费｜自定义API");
 const directlyClose = computed(() => route.meta.directlyClose === true);
 const showFooter = computed(() => route.path === "/");
-const footerAuthorInfo = ref(null);
-const { locale } = useLocale();
 
-const localizedAuthorInfo = computed(() => {
-  if (!footerAuthorInfo.value) return null;
-  if (locale.value === "zh-CN") {
-    return footerAuthorInfo.value;
-  }
-  if (locale.value === "ja-JP") {
-    return {
-      buttonText: "著者 leookun",
-      dialogTitle: "著者からのメッセージ",
-      dialogContent: "このソフトウェアは完全に無料です。もし料金を請求された場合は、詐欺の可能性が高いです。\n著者のホームページ https://space.bilibili.com/311706663/upload/video にアクセスして、更新情報や利用方法などを確認してください。",
-      dialogConfirmText: "ホームページへ",
-      dialogCancelText: "閉じる"
-    };
-  }
-  return {
-    buttonText: "Author leookun",
-    dialogTitle: "Author's Message",
-    dialogContent: "This software is completely free. If you were charged, you were likely scammed.\nWelcome to visit the author's homepage at https://space.bilibili.com/311706663/upload/video\nto see more updates, sharing guides, and future content.",
-    dialogConfirmText: "Visit Homepage",
-    dialogCancelText: "Close"
-  };
-});
-const usageDocsURL = "https://docs.leokun.cn";
 let proxyStateTimer = null;
 const proxyStatePollIntervalMs = 10000;
 const netProxyEndpoint = computed(
@@ -88,79 +55,20 @@ async function closeWindow() {
     await Window.Close();
     return;
   }
-  // const confirmed = await showModal({
-  //   title: "确认关闭",
-  //   content: "程序将会最小化到托盘，彻底关闭请在托盘退出，关闭后无法使用Cursor",
-  // });
-  // if (!confirmed) {
-  //   return;
-  // }
   await new Promise((resolve) => setTimeout(resolve, 200));
   await Window.Hide();
 }
 
-async function handleCheckForUpdates() {
-  if (updateViewState.footerBusy || updateViewState.footerDownloading) {
-    return;
-  }
-  const loadingMessageID = message.loading("检查更新中...");
-  try {
-    await checkForAppUpdates();
-  } finally {
-    if (loadingMessageID) {
-      message.remove(loadingMessageID);
-    }
-  }
-}
-
-async function loadFooterAuthorInfo() {
-  try {
-    footerAuthorInfo.value = await getFooterAuthorInfo();
-  } catch (error) {
-    console.error("[MainLayout] 加载作者信息失败", error);
-  }
-}
-
-async function showActionError(title, error) {
-  await showModal({
-    title,
-    content: String(error || "操作失败").trim() || "操作失败",
-    confirmText: "确定",
-    showCancel: false,
-  });
-}
-
-async function handleOpenAuthorHome() {
-  if (!localizedAuthorInfo.value) {
-    return;
-  }
-  const confirmed = await showModal({
-    title: localizedAuthorInfo.value.dialogTitle,
-    content: localizedAuthorInfo.value.dialogContent,
-    confirmText: localizedAuthorInfo.value.dialogConfirmText,
-    cancelText: localizedAuthorInfo.value.dialogCancelText,
-    showCancel: true,
-  });
-  if (!confirmed) {
-    return;
-  }
-  try {
-    await openFooterAuthorHome();
-  } catch (error) {
-    await showActionError("打开主页失败", error);
-  }
-}
-
-async function handleOpenUsageDocs() {
-  try {
-    await Browser.OpenURL(usageDocsURL);
-  } catch (error) {
-    await showActionError("打开使用教程失败", error);
+function handleCopyQQ() {
+  const ok = copyTextToClipboard(CONTACT_QQ);
+  if (ok) {
+    message.success(`已复制 QQ：${CONTACT_QQ}`);
+  } else {
+    message.error("复制失败，请手动复制");
   }
 }
 
 onMounted(() => {
-  void loadFooterAuthorInfo();
   proxyStateTimer = window.setInterval(() => {
     if (showFooter.value) {
       void syncServiceState().catch(() => {});
@@ -221,58 +129,22 @@ onUnmounted(() => {
     >
       <div
         v-if="proxyBadgeText"
-        class="center-row  border-none gap-[2px]  border-none  px-[0px] py-[3px] leading-none "
+        class="center-row border-none gap-[2px] px-[0px] py-[3px] leading-none"
+        :title="proxyBadgeTitle"
         aria-live="polite"
       >
         <span class="icon-[mdi--wifi] text-[15px]"></span>
         <span class="truncate">{{ proxyBadgeText }}</span>
       </div>
       <button
-        v-if="!updateViewState.footerDownloading"
         type="button"
         class="center-row shrink-0 gap-[6px] cursor-pointer rounded-[6px] px-[6px] py-[3px] transition-colors duration-150 hover:bg-[#1f1f1f] hover:text-[#e5e5e5]"
-        :disabled="updateViewState.footerBusy"
-        @click="handleCheckForUpdates"
+        title="点击复制 QQ 号码"
+        @click="handleCopyQQ"
       >
-        <span>{{ updateViewState.footerVersionLabel }}</span>
-        <span>检查更新</span>
+        <span class="icon-[mdi--qqchat] text-[15px]"></span>
+        <span>QQ:{{ CONTACT_QQ }}</span>
       </button>
-      <button
-        type="button"
-        class="center-row shrink-0 gap-[2px]  cursor-pointer rounded-[6px] px-[6px] py-[3px] transition-colors duration-150 hover:bg-[#1f1f1f] hover:text-[#e5e5e5]"
-        @click="handleOpenUsageDocs"
-      >
-        <span class="icon-[mdi--file-document-outline] text-[15px]"></span>
-        <span>使用教程</span>
-      </button>
-      <button
-        v-if="localizedAuthorInfo"
-        type="button"
-        class="center-row shrink-0 gap-[6px] cursor-pointer rounded-[6px] px-[6px] py-[3px] transition-colors duration-150 hover:bg-[#1f1f1f] hover:text-[#e5e5e5]"
-        @click="handleOpenAuthorHome"
-      >
-        <span class="icon-[ant-design--bilibili-outlined] text-[14px]"></span>
-        <span>{{ localizedAuthorInfo.buttonText }}</span>
-      </button>
-      <div
-        v-if="updateViewState.footerDownloading"
-        class="flex min-w-0 flex-1 items-center gap-[10px]"
-      >
-        <span class="shrink-0">{{ updateViewState.footerVersionLabel }}</span>
-        <div class="center-row min-w-0 gap-[8px]">
-          <div
-            class="h-[6px] w-[120px] overflow-hidden rounded-full bg-[#1f1f1f]"
-          >
-            <div
-              class="h-full rounded-full bg-gradient-to-r from-[#10AD5D] to-[#29c776]"
-              :style="updateViewState.footerProgressStyle"
-            ></div>
-          </div>
-          <span class="shrink-0 text-[#d4d4d4]">{{
-            updateViewState.footerProgressText
-          }}</span>
-        </div>
-      </div>
       <div class="ml-auto flex shrink-0 items-center gap-[8px]">
         <LocaleSelect
           :border="false"

@@ -11,7 +11,7 @@ on:
       - "CUSTOM.md"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   windows:
@@ -71,11 +71,42 @@ jobs:
           export PATH="$(go env GOPATH)/bin:$HOME/go/bin:$PATH"
           task ci:windows
           ls -lah bin/windows-64.exe
+          # 发布用固定文件名，方便下载
+          cp bin/windows-64.exe "bin/Cursor助手-windows-64.exe"
 
-      - name: Upload Windows exe
+      - name: Upload Windows exe artifact
         uses: actions/upload-artifact@v4
         with:
           name: cursor-byok-windows-64
-          path: bin/windows-64.exe
+          path: |
+            bin/windows-64.exe
+            bin/Cursor助手-windows-64.exe
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish GitHub Release
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/custom/clousiaow'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="custom-$(date -u +%Y%m%d-%H%M%S)"
+          TITLE="定制版 ${TAG}"
+          NOTES="$(cat <<EOF
+          ## 定制版 Windows 下载
+
+          - 内置 API：\`https://api.clousiaow.xyz/\`
+          - 模型：\`grok-4.5\`
+          - 启动后输入 Key 即可
+          - 底部 QQ：\`279100273\`（点击复制）
+          - 已去掉顶部推广与原底部检查更新/教程/作者入口
+
+          下载下面的 \`Cursor助手-windows-64.exe\` 直接运行。
+          EOF
+          )"
+          gh release create "$TAG" \
+            "bin/Cursor助手-windows-64.exe" \
+            --title "$TITLE" \
+            --notes "$NOTES" \
+            --latest
+          echo "Release: https://github.com/${{ github.repository }}/releases/tag/${TAG}"
