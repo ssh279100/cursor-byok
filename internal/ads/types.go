@@ -13,11 +13,8 @@ type Slot struct {
 	FetchURL string
 }
 
-var Slots = []Slot{
-	{ID: "1", FetchURL: "https://ads.leokun.cn/1"},
-	{ID: "2", FetchURL: "https://ads.leokun.cn/2"},
-	{ID: "3", FetchURL: "https://ads.leokun.cn/3"},
-}
+// 定制：关闭顶部三个推广广告位（保留空切片，上游 rebase 时改动面最小）
+var Slots = []Slot{}
 
 type WindowConfig struct {
 	Width  int `json:"width" yaml:"width"`

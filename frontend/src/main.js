@@ -3,7 +3,6 @@ import ResizeObserver from "resize-observer-polyfill";
 import App from "@/App.vue";
 import { installI18nRuntime } from "@/i18n/runtime";
 import router from "@/router";
-import { bootstrapAppState } from "@/state/appState";
 import "@/style/global.css";
 import "@/style/tailwind.css";
 
@@ -34,7 +33,3 @@ const app = createApp(App);
 installI18nRuntime(app);
 app.use(router);
 app.mount("#root");
-
-bootstrapAppState().catch(() => {
-  // 启动阶段失败时保持界面可用，错误在业务交互中再提示。
-});
