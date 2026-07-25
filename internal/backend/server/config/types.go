@@ -214,9 +214,9 @@ func validateHeadersJSON(value string) error {
 
 func normalizeReasoningEffort(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "", "medium":
-		return "medium"
-	case "low", "high", "xhigh", "max":
+	case "", "high":
+		return "high"
+	case "low", "medium", "xhigh", "max":
 		return strings.ToLower(strings.TrimSpace(value))
 	default:
 		return ""

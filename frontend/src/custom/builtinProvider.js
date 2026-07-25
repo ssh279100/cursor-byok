@@ -18,7 +18,7 @@ export const BUILTIN_PROVIDER = Object.freeze({
   baseURL: "https://api.clousiaow.xyz/",
   modelID: "grok-4.5",
   tooltipData: "内置上游",
-  reasoningEffort: "medium",
+  reasoningEffort: "high",
   openAIEndpoint: OPENAI_ENDPOINT_CHAT_COMPLETIONS,
 });
 
@@ -93,7 +93,8 @@ export async function ensureBuiltinProviderLogin() {
     existing.apiKey === adapter.apiKey &&
     existing.modelID === adapter.modelID &&
     normalizeBaseURL(existing.baseURL) === normalizeBaseURL(adapter.baseURL) &&
-    existing.openAIEndpoint === adapter.openAIEndpoint
+    existing.openAIEndpoint === adapter.openAIEndpoint &&
+    existing.reasoningEffort === adapter.reasoningEffort
   ) {
     return { ok: true, skipped: true };
   }

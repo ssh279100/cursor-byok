@@ -180,7 +180,7 @@ export function buildModelAdapterTestRequestHash(source) {
     normalizeBaseURL(adapter.baseURL),
     asString(adapter.apiKey),
     asString(adapter.modelID),
-    adapter.type === "openai" ? asString(adapter.reasoningEffort || "medium") : "",
+    adapter.type === "openai" ? asString(adapter.reasoningEffort || "high") : "",
     adapter.type === "openai" ? normalizeOpenAIEndpoint(adapter.openAIEndpoint) : "",
     adapter.type === "openai" ? String(Boolean(adapter.openAIExtraParamsEnabled)) : "false",
     adapter.type === "openai" && adapter.openAIExtraParamsEnabled ? asString(adapter.openAIExtraParamsJSON) : "",
@@ -268,7 +268,7 @@ export function createEmptyModelAdapter() {
     apiKey: "",
     tooltipData: "备注",
     modelID: "",
-    reasoningEffort: "medium",
+    reasoningEffort: "high",
     openAIEndpoint: OPENAI_ENDPOINT_RESPONSES,
     openAIExtraParamsEnabled: false,
     openAIExtraParamsJSON: OPENAI_EXTRA_PARAMS_DEFAULT_JSON,
@@ -377,7 +377,7 @@ export function normalizeModelAdapter(source) {
     modelID: asString(raw.modelID),
     reasoningEffort: SUPPORTED_REASONING_EFFORTS.has(normalizedReasoningEffort)
       ? normalizedReasoningEffort
-      : "medium",
+      : "high",
     openAIEndpoint: normalizedType === "openai" ? normalizedOpenAIEndpoint : "",
     openAIExtraParamsEnabled,
     openAIExtraParamsJSON,
