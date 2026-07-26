@@ -77,9 +77,6 @@ function createOptionalPositiveIntegerModel(key) {
 const maxCompletionTokensInput = createOptionalPositiveIntegerModel("maxCompletionTokens");
 const anthropicMaxTokensInput = createOptionalPositiveIntegerModel("anthropicMaxTokens");
 const contextWindowTokensInput = createOptionalPositiveIntegerModel("contextWindowTokens");
-const interfacePlaceholder = computed(() =>
-  draft.type === "anthropic" ? "例如：https://api.anthropic.com" : "例如：https://api.openai.com/v1",
-);
 const currentRequestHash = computed(() => buildModelAdapterTestRequestHash(draft));
 const directModelTestResult = computed(() => getModelAdapterTestResult(draft));
 const rememberedModelTestResult = computed(() =>
@@ -356,18 +353,7 @@ onMounted(async () => {
             />
           </label>
 
-          <label class="flex flex-col gap-1">
-            <span class="center-row justify-start gap-1.5 text-sm text-[#d4d4d4]">
-              <Tooltip :content="fieldTips.baseURL" />
-              <span>接口地址</span>
-            </span>
-            <input
-              v-model="draft.baseURL"
-              type="text"
-              :placeholder="interfacePlaceholder"
-              class="h-9 rounded-[6px] border border-[#3f3f3f] bg-[#232323] px-3 text-sm text-[#e5e5e5] outline-none focus:border-[#10AD5D]"
-            />
-          </label>
+          <!-- 定制：隐藏接口地址输入，baseURL 仍由配置/内置上游写入 -->
 
           <label class="flex flex-col gap-1">
             <span class="center-row justify-start gap-1.5 text-sm text-[#d4d4d4]">

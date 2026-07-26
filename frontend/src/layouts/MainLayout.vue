@@ -9,7 +9,8 @@ import { useRoute } from "vue-router";
 import copyTextToClipboard from "copy-text-to-clipboard";
 import Logo from "@/assets/logo.png";
 
-const CONTACT_QQ = "279100273";
+// 底部联系方式：点击复制冒号后的微信号
+const CONTACT_WECHAT = "nicebbc06";
 
 const route = useRoute();
 const message = useMessage();
@@ -59,10 +60,10 @@ async function closeWindow() {
   await Window.Hide();
 }
 
-function handleCopyQQ() {
-  const ok = copyTextToClipboard(CONTACT_QQ);
+function handleCopyWechat() {
+  const ok = copyTextToClipboard(CONTACT_WECHAT);
   if (ok) {
-    message.success(`已复制 QQ：${CONTACT_QQ}`);
+    message.success(`已复制微信：${CONTACT_WECHAT}`);
   } else {
     message.error("复制失败，请手动复制");
   }
@@ -139,11 +140,11 @@ onUnmounted(() => {
       <button
         type="button"
         class="center-row shrink-0 gap-[6px] cursor-pointer rounded-[6px] px-[6px] py-[3px] transition-colors duration-150 hover:bg-[#1f1f1f] hover:text-[#e5e5e5]"
-        title="点击复制 QQ 号码"
-        @click="handleCopyQQ"
+        title="点击复制微信号"
+        @click="handleCopyWechat"
       >
-        <span class="icon-[mdi--qqchat] text-[15px]"></span>
-        <span>QQ:{{ CONTACT_QQ }}</span>
+        <span class="icon-[mdi--wechat] text-[15px]"></span>
+        <span>点击复制微信:{{ CONTACT_WECHAT }}</span>
       </button>
       <div class="ml-auto flex shrink-0 items-center gap-[8px]">
         <LocaleSelect

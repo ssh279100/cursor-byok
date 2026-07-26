@@ -268,9 +268,7 @@ func Run(resources EmbeddedResources) error {
 	menu.AddSeparator()
 	startItem := menu.Add("启动服务")
 	stopItem := menu.Add("停止服务")
-	updateItem := menu.Add("检查更新").OnClick(func(ctx *application.Context) {
-		updateManager.CheckNow(true)
-	})
+	// 定制：托盘右键不展示「检查更新」
 	menu.AddSeparator()
 	showItem := menu.Add("显示窗口").OnClick(func(ctx *application.Context) {
 		showMainWindow()
@@ -310,21 +308,18 @@ func Run(resources EmbeddedResources) error {
 		if locale == "en-US" {
 			startItem.SetLabel("Start Service")
 			stopItem.SetLabel("Stop Service")
-			updateItem.SetLabel("Check for Updates")
 			showItem.SetLabel("Show Window")
 			hideItem.SetLabel("Hide Window")
 			quitItem.SetLabel("Exit")
 		} else if locale == "ja-JP" {
 			startItem.SetLabel("サービス起動")
 			stopItem.SetLabel("サービス停止")
-			updateItem.SetLabel("アップデートを確認")
 			showItem.SetLabel("ウィンドウを表示")
 			hideItem.SetLabel("ウィンドウを非表示")
 			quitItem.SetLabel("終了")
 		} else {
 			startItem.SetLabel("启动服务")
 			stopItem.SetLabel("停止服务")
-			updateItem.SetLabel("检查更新")
 			showItem.SetLabel("显示窗口")
 			hideItem.SetLabel("隐藏窗口")
 			quitItem.SetLabel("退出")
