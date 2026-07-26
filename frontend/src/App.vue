@@ -30,6 +30,7 @@
     :title="inputModalState.title"
     :content="inputModalState.content"
     :placeholder="inputModalState.placeholder"
+    :confirm-text="inputModalState.confirmText"
     :model-value="inputModalState.value"
     @update:model-value="inputModalState.value = $event"
     @confirm="resolveInputModal(true)"

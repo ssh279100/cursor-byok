@@ -5,10 +5,10 @@ import Switch from "@/components/ui/Switch.vue";
 import HomeMetricsCard from "@/components/HomeMetricsCard.vue";
 import { useMessage } from "@/composables/useMessage";
 import { showModal } from "@/composables/useModal";
+import { updateBuiltinApiKey } from "@/custom/builtinProvider";
 import {
   appState,
   appViewState,
-  openConfigWindow,
   openModelConfigWindow,
   saveRoutingMode,
   syncHomeMetrics,
@@ -49,12 +49,16 @@ async function handleRefreshMetrics() {
   await syncHomeMetrics().catch(() => {});
 }
 
-async function handleOpenConfig() {
-  try {
-    await openConfigWindow();
-  } catch (error) {
-    await showActionError("打开失败", toUserError(error));
+async function handleUpdateKey() {
+  const result = await updateBuiltinApiKey();
+  if (result.cancelled) {
+    return;
   }
+  if (!result.ok) {
+    await showActionError("更新 Key 失败", result.error);
+    return;
+  }
+  message.success(result.skipped ? "Key 未变化" : "Key 已保存");
 }
 
 async function handleOpenModelConfig() {
@@ -124,10 +128,10 @@ async function handleDirectModeChange(enabled) {
       <div class="flex items-center justify-between gap-4">
         <div>
           <h2 class="text-base font-medium text-white">本地配置</h2>
-          <div class="text-sm text-[#a3a3a3]">打开设置目录，或单独管理模型配置</div>
+          <div class="text-sm text-[#a3a3a3]">更新 API Key，或单独管理模型配置</div>
         </div>
         <div class="center-row gap-2">
-          <Button variant="default" @click="handleOpenConfig">设置文件夹</Button>
+          <Button variant="default" @click="handleUpdateKey">更新 Key</Button>
           <Button variant="primary" @click="handleOpenModelConfig">模型配置</Button>
         </div>
       </div>

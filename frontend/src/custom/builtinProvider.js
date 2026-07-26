@@ -105,3 +105,49 @@ export async function ensureBuiltinProviderLogin() {
   }
   return { ok: true };
 }
+
+/**
+ * 首页「更新 Key」：弹输入框，写入内置上游的 apiKey 到本地配置。
+ * @returns {Promise<{ok: boolean, cancelled?: boolean, error?: string}>}
+ */
+export async function updateBuiltinApiKey() {
+  const existingIndex = findBuiltinAdapterIndex();
+  const existing =
+    existingIndex >= 0 ? appState.modelAdapters[existingIndex] : null;
+  const currentKey = String(existing?.apiKey || "").trim();
+
+  const input = await showInputModal({
+    title: "更新 Key",
+    content: "输入 API Key 后点击保存，将写入本地模型配置。",
+    placeholder: "sk-...",
+    defaultValue: currentKey,
+    confirmText: "保存",
+  });
+
+  if (input === null) {
+    return { ok: false, cancelled: true };
+  }
+
+  const apiKey = String(input || "").trim();
+  if (!apiKey) {
+    return { ok: false, error: "Key 不能为空" };
+  }
+
+  const adapter = buildBuiltinAdapter(apiKey);
+  if (
+    existing &&
+    existing.apiKey === adapter.apiKey &&
+    existing.modelID === adapter.modelID &&
+    normalizeBaseURL(existing.baseURL) === normalizeBaseURL(adapter.baseURL) &&
+    existing.openAIEndpoint === adapter.openAIEndpoint &&
+    existing.reasoningEffort === adapter.reasoningEffort
+  ) {
+    return { ok: true, skipped: true };
+  }
+
+  const result = await saveModelAdapterAt(existingIndex, adapter);
+  if (!result.ok) {
+    return { ok: false, error: result.error || "保存 Key 失败" };
+  }
+  return { ok: true };
+}

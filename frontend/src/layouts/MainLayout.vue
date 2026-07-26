@@ -15,7 +15,7 @@ const CONTACT_WECHAT = "nicebbc06";
 const route = useRoute();
 const message = useMessage();
 const showIcon = computed(() => route.meta.showIcon !== false);
-const title = computed(() => route.meta.title ?? "Cursor助手｜永久免费｜自定义API");
+const title = computed(() => route.meta.title ?? "宝马API cursor助手");
 const directlyClose = computed(() => route.meta.directlyClose === true);
 const showFooter = computed(() => route.path === "/");
 

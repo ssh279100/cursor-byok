@@ -7,6 +7,7 @@ const props = defineProps({
   content: { type: String, default: "" },
   placeholder: { type: String, default: "" },
   modelValue: { type: String, default: "" },
+  confirmText: { type: String, default: "确定" },
 });
 
 const emit = defineEmits(["update:visible", "update:modelValue", "confirm", "cancel"]);
@@ -67,7 +68,7 @@ function onEnter(event) {
               />
               <div class="flex justify-end gap-2">
                 <Button variant="default" @click="handleCancel">取消</Button>
-                <Button variant="primary" @click="handleConfirm">确定</Button>
+                <Button variant="primary" @click="handleConfirm">{{ confirmText }}</Button>
               </div>
             </div>
           </div>

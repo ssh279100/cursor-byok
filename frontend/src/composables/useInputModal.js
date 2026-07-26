@@ -6,12 +6,13 @@ export const inputModalState = reactive({
   content: "",
   placeholder: "",
   value: "",
+  confirmText: "确定",
   _resolve: null,
 });
 
 /**
  * 显示输入弹窗，返回 Promise<string|null>
- * @param {Object} options - { title, content, placeholder, defaultValue }
+ * @param {Object} options - { title, content, placeholder, defaultValue, confirmText }
  * @returns {Promise<string|null>} - string=确定后的输入值, null=取消
  */
 export function showInputModal(options = {}) {
@@ -21,6 +22,7 @@ export function showInputModal(options = {}) {
     inputModalState.content = options.content ?? "";
     inputModalState.placeholder = options.placeholder ?? "";
     inputModalState.value = String(options.defaultValue ?? "");
+    inputModalState.confirmText = options.confirmText ?? "确定";
     inputModalState._resolve = resolve;
   });
 }
