@@ -56,25 +56,15 @@ func (s *WindowService) GetAppVersion() string {
 }
 
 // CheckForUpdates 触发一次手动检查更新。
+// 定制：空实现，彻底关闭更新检查入口。
 func (s *WindowService) CheckForUpdates() {
-	s.mu.RLock()
-	manager := s.updater
-	s.mu.RUnlock()
-	if manager == nil {
-		return
-	}
-	manager.CheckNow(true)
+	// no-op
 }
 
 // InstallReadyUpdate 安装当前已下载完成的更新。
+// 定制：禁用安装更新。
 func (s *WindowService) InstallReadyUpdate() error {
-	s.mu.RLock()
-	manager := s.updater
-	s.mu.RUnlock()
-	if manager == nil {
-		return fmt.Errorf("更新管理器未初始化")
-	}
-	return manager.InstallReadyUpdate()
+	return fmt.Errorf("更新功能已禁用")
 }
 
 // OpenConfigWindow 打开本地设置目录。

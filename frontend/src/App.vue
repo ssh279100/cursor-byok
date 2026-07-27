@@ -13,18 +13,7 @@
     @confirm="resolveModal(true)"
     @cancel="resolveModal(false)"
   />
-  <Modal
-    v-if="isMainWindow"
-    :visible="appState.updatePromptVisible"
-    :title="updateViewState.promptTitle"
-    :content="updateViewState.promptContent"
-    :confirm-text="updateViewState.promptConfirmText"
-    :cancel-text="updateViewState.promptCancelText"
-    :show-cancel="updateViewState.promptShowCancel"
-    :confirm-disabled="appState.updatePromptBusy"
-    @confirm="confirmUpdatePrompt"
-    @cancel="dismissUpdatePrompt"
-  />
+  <!-- 定制：关闭自动更新弹窗（后端也不再 Start 更新器） -->
   <InputModal
     :visible="inputModalState.visible"
     :title="inputModalState.title"
@@ -46,13 +35,7 @@ import { modalState, resolveModal } from "@/composables/useModal";
 import InputModal from "@/components/ui/InputModal.vue";
 import { inputModalState, resolveInputModal } from "@/composables/useInputModal";
 import { ensureBuiltinProviderLogin } from "@/custom/builtinProvider";
-import {
-  appState,
-  bootstrapAppState,
-  confirmUpdatePrompt,
-  dismissUpdatePrompt,
-  updateViewState,
-} from "@/state/appState";
+import { bootstrapAppState } from "@/state/appState";
 import { computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
 

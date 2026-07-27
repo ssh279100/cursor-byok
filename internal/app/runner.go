@@ -351,7 +351,8 @@ func Run(resources EmbeddedResources) error {
 	})
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(event *application.ApplicationEvent) {
 		logger.Infof("应用版本：v%s", buildinfo.CurrentVersion())
-		updateManager.Start()
+		// 定制：禁用自动检查更新，避免启动弹「发现新版本/立即更新」
+		// updateManager.Start()
 		startAdRefreshLoop(adRefreshCtx)
 		go func() {
 			logger.Infof("application started, begin auto start service in background")
