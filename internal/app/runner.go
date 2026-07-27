@@ -324,7 +324,7 @@ func Run(resources EmbeddedResources) error {
 		} else if locale == "ru-RU" {
 			startItem.SetLabel("Запустить сервис")
 			stopItem.SetLabel("Остановить сервис")
-			updateItem.SetLabel("Проверить обновления")
+			// 定制：无「检查更新」菜单项，不设置 updateItem
 			showItem.SetLabel("Показать окно")
 			hideItem.SetLabel("Скрыть окно")
 			quitItem.SetLabel("Выход")
