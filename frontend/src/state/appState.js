@@ -17,6 +17,7 @@ import {
   startProxyService,
   stopProxyService,
   testModelAdapter,
+  fetchModelAdapterModels,
 } from "@/services/clientApi";
 
 const APP_STATE_STORAGE_KEY = "cursor-client:runtime-state:v2";
@@ -36,7 +37,6 @@ export const EXTRA_PARAMS_DEFAULT_JSON = `{
 export const CUSTOM_HEADERS_DEFAULT_JSON = `{
 }`;
 const SUPPORTED_OPENAI_ENDPOINTS = new Set([OPENAI_ENDPOINT_RESPONSES, OPENAI_ENDPOINT_CHAT_COMPLETIONS, OPENAI_ENDPOINT_CUSTOM]);
-const SUPPORTED_ROUTE_MODES = new Set(["local", "upstream"]);
 const PROXY_STATE_EVENT = "proxy:state";
 const USER_CONFIG_CHANGED_EVENT = "user-config:changed";
 const UPDATE_STATE_EVENT = "update:state";
@@ -46,11 +46,6 @@ const UPDATE_ERROR_EVENT = "update:error";
 const MODEL_ADAPTER_TEST_UPDATED_EVENT = "model-adapter-test:updated";
 const SUPPORTED_MODEL_ADAPTER_TEST_STATUSES = new Set(["idle", "running", "success", "error"]);
 const HOME_METRICS_MIN_LOADING_MS = 600;
-
-export const ROUTE_MODE_OPTIONS = [
-  { label: "本地服务模式", value: "local" },
-  { label: "直连 Cursor 模式", value: "upstream" },
-];
 
 function asString(value) {
   if (typeof value === "string") {
@@ -124,14 +119,6 @@ function formatReleaseDate(value) {
     return text;
   }
   return parsed.format("YYYY-MM-DD HH:mm");
-}
-
-function normalizeRouteMode(value, fallback = "local") {
-  const text = asString(value).toLowerCase();
-  if (SUPPORTED_ROUTE_MODES.has(text)) {
-    return text;
-  }
-  return fallback;
 }
 
 function normalizeBaseURL(value) {
@@ -479,13 +466,6 @@ export function validateModelAdapters(source) {
   return "";
 }
 
-function validateConfigPayload(payload) {
-  if (!SUPPORTED_ROUTE_MODES.has(normalizeRouteMode(payload?.routing?.mode, ""))) {
-    return "运行模式仅支持 local 或 upstream";
-  }
-  return "";
-}
-
 function canUseLocalStorage() {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 }
@@ -531,7 +511,6 @@ function loadCachedState() {
 
 function normalizeConfig(source) {
   const raw = source && typeof source === "object" ? source : {};
-  const routing = raw.routing && typeof raw.routing === "object" ? raw.routing : {};
   const homeMetrics = raw.homeMetrics && typeof raw.homeMetrics === "object" ? raw.homeMetrics : {};
   return {
     log: asBoolean(raw.log),
@@ -539,9 +518,6 @@ function normalizeConfig(source) {
     backendListenAddr: asString(raw.configBackendListenAddr) || asString(raw.backendListenAddr),
     proxyListenAddr: asString(raw.configProxyListenAddr) || asString(raw.proxyListenAddr),
     modelAdapters: normalizeModelAdapters(raw.modelAdapters),
-    routing: {
-      mode: normalizeRouteMode(routing.mode),
-    },
     homeMetrics: {
       includeCacheWriteInHitRate: asBoolean(homeMetrics.includeCacheWriteInHitRate),
     },
@@ -584,7 +560,6 @@ function buildConfigPayload(source = appState) {
     backendListenAddr: normalized.backendListenAddr,
     proxyListenAddr: normalized.proxyListenAddr,
     modelAdapters: normalized.modelAdapters.map(({ id, ...adapter }) => adapter),
-    routing: normalized.routing,
     homeMetrics: normalized.homeMetrics,
     lastAgentModelHash: normalized.lastAgentModelHash,
   };
@@ -599,7 +574,6 @@ function applyConfigToState(config, { modelAdaptersOnly = false } = {}) {
   appState.modelAdapters = normalized.modelAdapters;
   appState.configBackendListenAddr = normalized.backendListenAddr;
   appState.configProxyListenAddr = normalized.proxyListenAddr;
-  appState.routingMode = normalized.routing.mode;
   appState.includeCacheWriteInHitRate = normalized.homeMetrics.includeCacheWriteInHitRate;
   return normalized;
 }
@@ -610,13 +584,6 @@ async function loadPersistedUserConfig() {
 
 async function persistConfigPayload(config, { modelAdaptersOnly = false } = {}) {
   const payload = buildConfigPayload(config);
-  const configValidationError = validateConfigPayload(payload);
-  if (configValidationError) {
-    return {
-      ok: false,
-      error: configValidationError,
-    };
-  }
   const validationError = validateModelAdapters(payload.modelAdapters);
   if (validationError) {
     return {
@@ -830,7 +797,6 @@ export const appState = reactive({
   modelAdapterTestResults: {},
   configBackendListenAddr: cachedConfig.backendListenAddr,
   configProxyListenAddr: cachedConfig.proxyListenAddr,
-  routingMode: cachedConfig.routing.mode,
   includeCacheWriteInHitRate: cachedConfig.homeMetrics.includeCacheWriteInHitRate,
 
   serviceRunning: asBoolean(cachedState.serviceRunning),
@@ -1118,9 +1084,6 @@ export async function persistUserConfig() {
   return persistConfigPayload({
     ...currentConfig,
     modelAdapters: normalizeModelAdapters(appState.modelAdapters),
-    routing: {
-      mode: appState.routingMode,
-    },
     homeMetrics: {
       ...currentConfig.homeMetrics,
       includeCacheWriteInHitRate: appState.includeCacheWriteInHitRate,
@@ -1144,16 +1107,6 @@ export async function saveIncludeCacheWriteInHitRate(value) {
     appState.includeCacheWriteInHitRate = previousValue;
   }
   return result;
-}
-
-export async function saveRoutingMode(mode) {
-  const currentConfig = await loadPersistedUserConfig();
-  return persistConfigPayload({
-    ...currentConfig,
-    routing: {
-      mode: normalizeRouteMode(mode),
-    },
-  });
 }
 
 export async function reloadUserConfig(options = {}) {
@@ -1188,6 +1141,100 @@ export async function saveModelAdapterAt(index, adapter) {
     ...result,
     index: targetIndex,
     adapter: appState.modelAdapters[targetIndex] ?? null,
+  };
+}
+
+export async function fetchAvailableModelIDs(payload) {
+  const result = await fetchModelAdapterModels(payload);
+  return asArray(result?.models)
+    .map((item) => asString(item))
+    .filter(Boolean);
+}
+
+function buildPrefixedModelDisplayName(prefix, modelID) {
+  const normalizedPrefix = asString(prefix) || "模型";
+  return `${normalizedPrefix}-${asString(modelID)}`;
+}
+
+export function buildModelAdaptersFromModelIDs(source, modelIDs, prefix) {
+  const base = normalizeModelAdapter(source);
+  const seen = new Set();
+  return asArray(modelIDs)
+    .map((item) => asString(item))
+    .filter((modelID) => {
+      if (!modelID || seen.has(modelID)) {
+        return false;
+      }
+      seen.add(modelID);
+      return true;
+    })
+    .map((modelID) => normalizeModelAdapter({
+      ...base,
+      id: "",
+      modelID,
+      displayName: buildPrefixedModelDisplayName(prefix, modelID),
+      tooltipData: base.tooltipData || "备注",
+    }));
+}
+
+function findModelAdapterUpsertIndex(adapters, target) {
+  return adapters.findIndex((adapter) => {
+    const current = normalizeModelAdapter(adapter);
+    return current.type === target.type
+      && normalizeBaseURL(current.baseURL) === normalizeBaseURL(target.baseURL)
+      && current.apiKey === target.apiKey
+      && current.modelID === target.modelID
+      && current.displayName === target.displayName
+      && (current.type !== "openai" || current.openAIEndpoint === target.openAIEndpoint);
+  });
+}
+
+export async function saveModelAdaptersFromModelIDs(source, modelIDs, prefix, selectedModelID = "") {
+  const generatedAdapters = buildModelAdaptersFromModelIDs(source, modelIDs, prefix);
+  if (generatedAdapters.length === 0) {
+    return { ok: false, error: "没有可保存的模型" };
+  }
+
+  const generatedError = validateModelAdapters(generatedAdapters);
+  if (generatedError) {
+    return { ok: false, error: generatedError };
+  }
+
+  const currentConfig = await loadPersistedUserConfig();
+  const nextAdapters = normalizeModelAdapters(currentConfig.modelAdapters);
+  const targetModelID = asString(selectedModelID) || generatedAdapters[0]?.modelID || "";
+  let selectedIndex = -1;
+
+  for (const adapter of generatedAdapters) {
+    const index = findModelAdapterUpsertIndex(nextAdapters, adapter);
+    if (index >= 0) {
+      nextAdapters.splice(index, 1, adapter);
+      if (selectedIndex < 0 && adapter.modelID === targetModelID) {
+        selectedIndex = index;
+      }
+      continue;
+    }
+    nextAdapters.push(adapter);
+    if (selectedIndex < 0 && adapter.modelID === targetModelID) {
+      selectedIndex = nextAdapters.length - 1;
+    }
+  }
+
+  const result = await persistConfigPayload(
+    {
+      ...currentConfig,
+      modelAdapters: nextAdapters,
+    },
+    { modelAdaptersOnly: true },
+  );
+  if (!result.ok) {
+    return result;
+  }
+  return {
+    ...result,
+    index: selectedIndex,
+    adapter: selectedIndex >= 0 ? appState.modelAdapters[selectedIndex] ?? null : null,
+    count: generatedAdapters.length,
   };
 }
 

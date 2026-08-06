@@ -23,6 +23,7 @@ import (
 	interactionbridge "cursor/internal/backend/agent/bridge/interaction"
 	runtimecore "cursor/internal/backend/agent/core"
 	modeladapter "cursor/internal/backend/agent/model"
+	promptengine "cursor/internal/backend/agent/prompt"
 	protocol "cursor/internal/backend/agent/protocol"
 )
 
@@ -301,6 +302,7 @@ func NewService(historyRoot string, resolver modeladapter.ChannelResolver) *Serv
 		appendSeq:          newAppendSequenceTracker(),
 	}
 	service.startHistoryMaintenance()
+	store.SyncAllCursorTranscriptsBestEffort()
 	return service
 }
 
@@ -672,6 +674,7 @@ func (service *Service) decodeInboundIntent(requestID string, message *agentv1.A
 	default:
 		return InboundIntent{}, fmt.Errorf("unsupported client message kind: %s", clientKind)
 	}
+	intent.ManualCompaction = resolveInboundManualCompaction(message, intent.UserMessage)
 	return intent, nil
 }
 
@@ -688,6 +691,11 @@ func (service *Service) handleRunIntent(intent InboundIntent) error {
 	conversation, effectiveMode, turnSeq, initialEntries, err := service.bootstrapRuntimeConversation(intent)
 	if err != nil {
 		return err
+	}
+	if intent.RequestContext != nil {
+		if folder := normalizeAgentTranscriptsFolder(intent.RequestContext.GetEnv().GetAgentTranscriptsFolder()); folder != "" {
+			conversation.AgentTranscriptsFolder = folder
+		}
 	}
 	rewindDecision := service.decideRunRewind(intent, conversation)
 	if rewindDecision.Evaluated && !rewindDecision.Apply {
@@ -751,6 +759,7 @@ func (service *Service) handleRunIntent(intent InboundIntent) error {
 	stream.mu.Lock()
 	stream.ThinkingEffort = strings.TrimSpace(intent.ThinkingEffort)
 	stream.SubagentModelOverrides = cloneSubagentModelOverrides(intent.SubagentModelOverrides)
+	stream.ManualCompaction = intent.ManualCompaction
 	stream.PendingProviderAction = providerActionNone
 	stream.PendingCompaction = nil
 	stream.PendingExecs = make(map[string]runtimecore.PendingExec)
@@ -788,6 +797,7 @@ func (service *Service) handleRunIntent(intent InboundIntent) error {
 		"subagent_model_override_count": len(intent.SubagentModelOverrides),
 		"subagent_model_overrides":      subagentModelOverrideSummaries(intent.SubagentModelOverrides),
 		"latest_user_text":              userMessageText(intent.UserMessage),
+		"manual_compaction_requested":   intent.ManualCompaction.Requested,
 	})
 	if err := service.publishCheckpoint(intent.RequestID, intent.ConversationID); err != nil {
 		return err
@@ -848,9 +858,7 @@ func (service *Service) handleCancelIntent(intent InboundIntent) error {
 		})
 	}
 	if hasCheckpoint {
-		if err := service.publishCheckpoint(stream.RequestID, stream.ConversationID); err != nil {
-			return err
-		}
+		service.discardPendingCheckpoint(stream, "checkpoint superseded by cancellation")
 	}
 	clearPendingProviderCompletion(stream)
 	stream.mu.Lock()
@@ -2112,9 +2120,15 @@ func (service *Service) completeSuccessfulTurn(stream *ActiveStream, completion 
 			err,
 		)
 	}
-	if err := service.publishCheckpoint(requestID, conversationID); err != nil {
-		return err
+	return service.publishCheckpointWithCompletion(requestID, conversationID, &completion)
+}
+
+func (service *Service) finishSuccessfulTurnAfterCheckpoint(stream *ActiveStream, completion pendingTurnCompletion) error {
+	if stream == nil {
+		return nil
 	}
+	requestID := firstNonEmpty(strings.TrimSpace(completion.RequestID), strings.TrimSpace(stream.RequestID))
+	usage := completion.Usage
 	if err := service.broker.Publish(requestID, StreamEvent{
 		Message: buildTurnEndedMessage(usage.InputTokens, usage.OutputTokens, usage.CacheReadTokens, usage.CacheWriteTokens),
 	}); err != nil {
@@ -2141,7 +2155,11 @@ func (service *Service) failStreamIfNonTerminal(stream *ActiveStream, terminalCo
 }
 
 // publishCheckpoint 按当前内存会话镜像投影出 checkpoint，并广播给所有 RunSSE 订阅者。
-func (service *Service) publishCheckpoint(requestID string, _ string) error {
+func (service *Service) publishCheckpoint(requestID string, conversationID string) error {
+	return service.publishCheckpointWithCompletion(requestID, conversationID, nil)
+}
+
+func (service *Service) publishCheckpointWithCompletion(requestID string, _ string, completion *pendingTurnCompletion) error {
 	stream, ok := service.broker.Get(requestID)
 	if !ok || stream == nil {
 		return fmt.Errorf("request is not active: %s", requestID)
@@ -2150,15 +2168,16 @@ func (service *Service) publishCheckpoint(requestID string, _ string) error {
 	if err != nil {
 		return err
 	}
-	state, err := service.projector.ProjectLegacyCheckpoint(conversation)
+	projection, err := service.projector.ProjectCheckpointProjection(conversation)
 	if err != nil {
 		return err
 	}
-	state.PendingToolCalls = buildPendingToolCalls(pendingExecs, pendingInteractions)
-	service.rewriteCheckpointTokenDetailsForClient(stream, conversation, state)
-	return service.broker.Publish(requestID, StreamEvent{
-		Message: buildCheckpointMessage(state),
-	})
+	if projection == nil || projection.State == nil {
+		return fmt.Errorf("checkpoint projection is empty")
+	}
+	projection.State.PendingToolCalls = buildPendingToolCalls(pendingExecs, pendingInteractions)
+	service.rewriteCheckpointTokenDetailsForClient(stream, conversation, projection.State)
+	return service.queueCheckpointProjection(stream, projection, completion)
 }
 
 func (service *Service) rewriteCheckpointTokenDetailsForClient(stream *ActiveStream, conversation *ConversationFile, state *agentv1.ConversationStateStructure) {
@@ -2332,7 +2351,8 @@ func buildRunEntries(intent InboundIntent, effectiveMode agentv1.AgentMode, turn
 		}
 	}
 	if intent.UserMessage != nil {
-		payload, err := protojson.Marshal(normalizeUserMessageForStorage(intent.UserMessage))
+		normalized := normalizeUserMessageForStorage(intent.UserMessage)
+		payload, err := protojson.Marshal(normalized)
 		if err != nil {
 			return nil, err
 		}
@@ -2343,6 +2363,13 @@ func buildRunEntries(intent InboundIntent, effectiveMode agentv1.AgentMode, turn
 			Kind:      "user_message",
 			Payload:   payload,
 		})
+		if commandMessage, ok := promptengine.BuildSelectedCursorCommandsReplayMessage(normalized); ok {
+			entries = append(entries, newPromptContextEntry(turnSeq, intent.RequestID, newPromptContextMessage(
+				promptContextSourceSelectedCursorCommands,
+				modeladapter.Message{Role: commandMessage.Role, Content: commandMessage.Content},
+				true,
+			)))
+		}
 	}
 	modeEntry, err := newModeMetadataEntry(turnSeq, intent.RequestID, effectiveMode, intent.HasExplicitMode, intent.ModeSource)
 	if err != nil {
@@ -2643,6 +2670,38 @@ func conversationActionIsResume(action *agentv1.ConversationAction) bool {
 	return ok
 }
 
+func inboundConversationAction(message *agentv1.AgentClientMessage) *agentv1.ConversationAction {
+	if message == nil {
+		return nil
+	}
+	if action := message.GetConversationAction(); action != nil {
+		return action
+	}
+	if runRequest := message.GetRunRequest(); runRequest != nil {
+		return runRequest.GetAction()
+	}
+	return nil
+}
+
+func conversationActionIsSummarize(action *agentv1.ConversationAction) bool {
+	if action == nil {
+		return false
+	}
+	_, ok := action.GetAction().(*agentv1.ConversationAction_SummarizeAction)
+	return ok
+}
+
+func resolveInboundManualCompaction(message *agentv1.AgentClientMessage, userMessage *agentv1.UserMessage) manualCompactionDirective {
+	instruction, requested := parseManualCompactionRequest(userMessage)
+	if conversationActionIsSummarize(inboundConversationAction(message)) {
+		requested = true
+	}
+	return manualCompactionDirective{
+		Requested:   requested,
+		Instruction: instruction,
+	}
+}
+
 func conversationActionStartsRun(action *agentv1.ConversationAction) bool {
 	if action == nil {
 		return false
@@ -2650,6 +2709,7 @@ func conversationActionStartsRun(action *agentv1.ConversationAction) bool {
 	switch action.GetAction().(type) {
 	case *agentv1.ConversationAction_UserMessageAction,
 		*agentv1.ConversationAction_ResumeAction,
+		*agentv1.ConversationAction_SummarizeAction,
 		*agentv1.ConversationAction_StartPlanAction,
 		*agentv1.ConversationAction_ExecutePlanAction:
 		return true

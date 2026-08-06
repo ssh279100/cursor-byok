@@ -1,7 +1,10 @@
 import {
+  DisconnectCursorAccount,
+  GetCursorAccountStatus,
   GetState,
   LoadUserConfig,
   SaveUserConfig,
+  StartCursorAccountLogin,
   StartProxy,
   StopProxy,
 } from "@bindings/cursor/internal/bridge/proxyservice.js";
@@ -60,6 +63,18 @@ export function loadUserConfig() {
 
 export function saveUserConfig(payload) {
   return withApiLogging("SaveUserConfig", payload, () => SaveUserConfig(payload));
+}
+
+export function getCursorAccountStatus() {
+  return withApiLogging("GetCursorAccountStatus", undefined, () => GetCursorAccountStatus());
+}
+
+export function startCursorAccountLogin() {
+  return withApiLogging("StartCursorAccountLogin", undefined, () => StartCursorAccountLogin());
+}
+
+export function disconnectCursorAccount() {
+  return withApiLogging("DisconnectCursorAccount", undefined, () => DisconnectCursorAccount());
 }
 
 export function getProxyState() {
@@ -144,5 +159,11 @@ export function testModelAdapter(adapter) {
 export function getModelAdapterTestResults() {
   return withApiLogging("GetModelAdapterTestResults", undefined, () =>
     Call.ByName(`${PROXY_SERVICE_NAME}.GetModelAdapterTestResults`),
+  );
+}
+
+export function fetchModelAdapterModels(payload) {
+  return withApiLogging("FetchModelAdapterModels", payload, () =>
+    Call.ByName(`${PROXY_SERVICE_NAME}.FetchModelAdapterModels`, payload),
   );
 }

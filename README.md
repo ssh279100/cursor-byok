@@ -5,6 +5,9 @@
 <img  width="820"  alt="image" src="https://github.com/user-attachments/assets/a607be84-a738-4e33-9750-13352e74001c" />
 
 
+## 交流群组
+https://t.me/cursor_byok
+
 
 ## 为什么做这个项目
 
@@ -17,7 +20,7 @@
 ## 路线图
 
 [正式版路线图](https://github.com/leookun/cursor-byok/discussions/32)
-[详细使用教程](https://dcne38qm5vlg.feishu.cn/wiki/JeP7wdGnziBXuikNaF5czWbrn8c)
+[详细使用教程](https://docs.leokun.cn)
 
 ## 后续
 
@@ -34,13 +37,3 @@
 
 
 
-
-## Star History
-
-<a href="https://www.star-history.com/?repos=leookun%2Fcursor-byok&type=timeline&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=leookun/cursor-byok&type=timeline&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=leookun/cursor-byok&type=timeline&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=leookun/cursor-byok&type=timeline&legend=top-left" />
- </picture>
-</a>
