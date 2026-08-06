@@ -69,6 +69,8 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="$(go env GOPATH)/bin:$HOME/go/bin:$PATH"
+          task common:generate:proto
+          task common:build:frontend
           task ci:windows
           ls -lah bin/windows-64.exe
           # 发布用固定文件名，方便下载
