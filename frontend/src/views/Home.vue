@@ -1,7 +1,6 @@
 <script setup>
 import Button from "@/components/ui/Button.vue";
 import Card from "@/components/ui/Card.vue";
-import Switch from "@/components/ui/Switch.vue";
 import HomeMetricsCard from "@/components/HomeMetricsCard.vue";
 import { useMessage } from "@/composables/useMessage";
 import { showModal } from "@/composables/useModal";
@@ -10,15 +9,12 @@ import {
   appState,
   appViewState,
   openModelConfigWindow,
-  saveRoutingMode,
   syncHomeMetrics,
   syncServiceState,
   toUserError,
   toggleService,
 } from "@/state/appState";
-import { computed } from "vue";
 
-const directModeEnabled = computed(() => appState.routingMode === "upstream");
 const message = useMessage();
 
 async function showActionError(title, error) {
@@ -68,15 +64,6 @@ async function handleOpenModelConfig() {
     await showActionError("打开失败", toUserError(error));
   }
 }
-
-async function handleDirectModeChange(enabled) {
-  const result = await saveRoutingMode(enabled ? "upstream" : "local");
-  if (!result.ok) {
-    await showActionError("切换失败", result.error);
-    return;
-  }
-  message.success(enabled ? "已切换到直连 Cursor 模式" : "已切换到本地服务模式");
-}
 </script>
 
 <template>
@@ -110,17 +97,6 @@ async function handleDirectModeChange(enabled) {
           class="rounded-[8px] border border-[#4b1d1d] bg-[#2a1313] px-3 py-2 text-sm text-[#fca5a5]">
           {{ appState.serviceLastError }}
         </div>
-
-        <Switch
-          label="直连模式"
-          description="开启后，Cursor将直接接通官方，请勿开启"
-          enabled-text="当前为直连模式"
-          disabled-text="当前为本地服务模式"
-          :enabled="directModeEnabled"
-          :busy="appState.configSaving"
-          :disabled="appState.configSaving"
-          @change="handleDirectModeChange"
-        />
       </div>
     </Card>
 
