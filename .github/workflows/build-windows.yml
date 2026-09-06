@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - custom/clousiaow
-      - main
     paths-ignore:
       - "**.md"
       - "CUSTOM.md"
@@ -13,86 +12,73 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: build-windows-custom
+  cancel-in-progress: true
+
 jobs:
   windows:
     name: windows-amd64
     runs-on: windows-latest
     timeout-minutes: 60
-    defaults:
-      run:
-        shell: bash
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.25.x"
-          cache: true
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: yarn
-          cache-dependency-path: frontend/yarn.lock
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
 
-      - name: Setup protoc
-        uses: arduino/setup-protoc@v3
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
         with:
-          version: "29.3"
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          workspaces: ". -> target"
 
-      - name: Enable Yarn Classic
-        run: |
-          corepack enable
-          corepack prepare yarn@1.22.22 --activate
-          yarn --version
+      - name: Install frontend dependencies
+        working-directory: apps/desktop
+        run: npm ci
 
-      - name: Install build tools
+      - name: Generate temporary updater signing key
+        working-directory: apps/desktop
+        shell: pwsh
         run: |
-          set -euo pipefail
-          go install github.com/go-task/task/v3/cmd/task@v3.43.3
-          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha.74
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
-          go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.19.1
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-          echo "$HOME/go/bin" >> "$GITHUB_PATH"
-          export PATH="$(go env GOPATH)/bin:$HOME/go/bin:$PATH"
-          task --version
-          wails3 version
-          protoc --version
-          protoc-gen-go --version
+          New-Item -ItemType Directory -Force -Path "../../.tauri" | Out-Null
+          npm exec tauri signer generate -- --ci --write-keys "../../.tauri/cursor-byok-build.key"
 
-      - name: Build Windows exe
+      - name: Build Windows desktop exe
+        working-directory: apps/desktop
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ github.workspace }}/.tauri/cursor-byok-build.key
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         run: |
-          set -euo pipefail
-          export PATH="$(go env GOPATH)/bin:$HOME/go/bin:$PATH"
-          task common:generate:proto
-          task common:build:frontend
-          task ci:windows
-          ls -lah bin/windows-64.exe
-          # 发布用固定文件名，方便下载
-          cp bin/windows-64.exe "bin/Cursor助手-windows-64.exe"
+          npm run tauri:build -- --bundles nsis
+          New-Item -ItemType Directory -Force -Path "../../bin" | Out-Null
+          Copy-Item "../../target/release/cursor-byok-desktop.exe" "../../bin/Cursor助手-windows-64.exe" -Force
+          Get-ChildItem "../../bin"
 
       - name: Upload Windows exe artifact
         uses: actions/upload-artifact@v4
         with:
           name: cursor-byok-windows-64
-          path: |
-            bin/windows-64.exe
-            bin/Cursor助手-windows-64.exe
+          path: bin/Cursor助手-windows-64.exe
           if-no-files-found: error
           retention-days: 14
 
       - name: Publish GitHub Release
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/custom/clousiaow'
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          TAG="custom-$(date -u +%Y%m%d-%H%M%S)"
+          TAG="custom-$(date -u +%Y%m%d-%H%M%S)-${{ github.run_number }}"
           TITLE="定制版 ${TAG}"
           NOTES="$(cat <<EOF
           ## 定制版 Windows 下载
@@ -100,14 +86,12 @@ jobs:
           - 内置 API：\`https://api.clousiaow.xyz/\`
           - 模型：\`grok-4.5\`
           - 启动后输入 Key 即可
-          - 底部微信：\`nicebbc06\`（点击复制）
-          - 已去掉托盘「检查更新」、模型编辑中的接口地址、顶部推广与原底部检查更新/教程/作者入口
+          - 已关闭应用内更新检查与推广入口
 
           下载下面的 \`Cursor助手-windows-64.exe\` 直接运行。
           EOF
           )"
-          gh release create "$TAG" \
-            "bin/Cursor助手-windows-64.exe" \
+          gh release create "$TAG" "bin/Cursor助手-windows-64.exe" \
             --title "$TITLE" \
             --notes "$NOTES" \
             --latest
