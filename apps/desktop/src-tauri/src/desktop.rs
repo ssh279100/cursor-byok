@@ -259,7 +259,6 @@ pub fn run() -> ExitCode {
                 open_main_window(app.handle())?;
             }
             tray::create(app)?;
-            crate::update::signal_ready_if_requested()?;
             Ok(())
         })
         .build(tauri::generate_context!());
