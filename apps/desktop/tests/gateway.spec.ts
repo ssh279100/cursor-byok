@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 
 async function setup(page: Page) {
-  const state = { ca: "missing", enabled: false, cancelInstall: false, connected: false, key: "", effort: "", missingRecords: false, emptyRecords: false, requests: [] as string[] };
+  const state = { tokens: { input_tokens: 167, output_tokens: 5, cache_read_tokens: 4224, cache_creation_tokens: 0 }, ca: "missing", enabled: false, cancelInstall: false, connected: false, key: "", effort: "", missingRecords: false, emptyRecords: false, requests: [] as string[] };
   await page.addInitScript(() => {
     localStorage.setItem("cursor-byok.locale", "zh-CN");
     if (!localStorage.getItem("cursor-byok.theme")) localStorage.setItem("cursor-byok.theme", "default-dark");
@@ -25,18 +25,18 @@ async function setup(page: Page) {
       if (state.missingRecords) return reply({ message: "服务端尚未提供账单接口，请联系管理员更新服务" }, 502);
       return reply({ page: Number(url.searchParams.get("page")), pages: 2, total: state.emptyRecords ? 0 : 21, items: state.emptyRecords ? [] : [{
         id: 1, created_at: "2026-10-10T02:30:00Z", model: state.key === "second-test-key" ? "gpt-6-sol（新 Key）" : "gpt-6-sol",
-        reasoning_effort: "high", input_tokens: 167, output_tokens: 5, cache_read_tokens: 4224, cache_creation_tokens: 0, actual_cost: 0.0012288, duration_ms: 3330,
+        reasoning_effort: "high", ...state.tokens, actual_cost: 0.0012288, duration_ms: 3330,
       }] });
     }
     if (path === "/models") return reply(state.connected ? [{ model_hash: "test-model", group_name: "宝马ai", base_url: "https://ai.bmapi.me", model_id: "gpt-6-sol", api_key: "" }] : []);
     if (path === "/llm-calls" || path === "/plugins") return reply([]);
     if (path === "/overview") return reply({ metrics: {}, token_usage_series: [] });
-    if (path === "/harness/cursor/status") return reply({ platform: "windows", ca: state.ca, settings_applied: state.enabled });
+    if (path === "/harness/cursor/status") return reply({ platform: "windows", ca: state.ca, integration: state.enabled ? "enabled" : "disabled", settings_applied: state.enabled });
     if (path === "/harness/cursor/enabled") {
       if (state.cancelInstall) return reply({ message: "证书授权被取消，请重试" }, 400);
       state.enabled = route.request().postDataJSON().enabled;
       state.ca = "ready";
-      return reply({ platform: "windows", ca: state.ca, settings_applied: state.enabled });
+      return reply({ platform: "windows", ca: state.ca, integration: state.enabled ? "enabled" : "disabled", settings_applied: state.enabled });
     }
     if (path === "/settings/ports") return reply({ proxy_port: 0, service_port: 0 });
     if (path === "/settings/observability") return reply({ detailed: false });
@@ -59,6 +59,7 @@ test("填写 Key、查看账单、翻页、换 Key、重启页面和移除", asy
   await connect(page);
   await expect(page.getByRole("heading", { name: "调用账单" })).toBeVisible();
   expect(state.effort).toBe("high");
+  await expect(page.getByRole("cell", { name: "96.2%", exact: true })).toBeVisible();
   await expect(page.getByRole("cell", { name: "高", exact: true })).toBeVisible();
   await expect(page.getByRole("cell", { name: "3.33 秒" })).toBeVisible();
   await page.getByRole("button", { name: "下一页" }).click();
@@ -110,8 +111,7 @@ test("小窗口和浅色主题，Cursor 配置保留引导", async ({ page }) =>
   await page.getByRole("button", { name: "下一页" }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: "test-results/gateway-light-table.png", fullPage: true });
   await page.getByRole("link", { name: "Cursor 配置", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "连接 Cursor" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "一键连接 Cursor", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "点击启动服务", exact: true })).toBeEnabled();
   await expect(page.getByText("添加模型", { exact: true })).toHaveCount(0);
   await page.screenshot({ path: "test-results/cursor-setup.png", fullPage: true });
 });
@@ -123,14 +123,28 @@ test("首次连接自动配置，取消授权后可重试和关闭", async ({ pa
   await page.getByRole("link", { name: "Cursor 配置", exact: true }).click();
   await expect(page.getByRole("button", { name: "初始化 / 安装证书" })).toHaveCount(0);
   state.cancelInstall = true;
-  await page.getByRole("button", { name: "一键连接 Cursor", exact: true }).click();
+  await page.getByRole("button", { name: "点击启动服务", exact: true }).click();
   await expect(page.getByText("证书授权被取消，请重试", { exact: true })).toBeVisible();
   expect(state.enabled).toBe(false);
   state.cancelInstall = false;
-  await page.getByRole("button", { name: "一键连接 Cursor", exact: true }).click();
-  await expect(page.getByText("当前状态：已连接", { exact: false })).toBeVisible();
-  await page.getByRole("button", { name: "关闭接管", exact: true }).click();
-  await page.getByRole("alertdialog").getByRole("button", { name: "关闭接管", exact: true }).click();
-  await expect(page.getByRole("button", { name: "一键连接 Cursor", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "点击启动服务", exact: true }).click();
+  await expect(page.getByRole("button", { name: "服务运行中 · 点击停止" })).toHaveAttribute("aria-pressed", "true");
+  await page.mouse.move(0, 0);
+  await expect(page.getByRole("button", { name: "服务运行中 · 点击停止" })).toHaveCSS("background-color", "rgb(8, 116, 67)");
+  await page.screenshot({ path: "test-results/cursor-running.png", fullPage: true });
+  await page.getByRole("button", { name: "服务运行中 · 点击停止", exact: true }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "停止服务", exact: true }).click();
+  await expect(page.getByRole("button", { name: "点击启动服务", exact: true })).toBeEnabled();
   expect(state.enabled).toBe(false);
+});
+
+
+test("缓存率包含缓存写入、不计输出，零输入不伪造比例", async ({ page }) => {
+  const state = await setup(page);
+  state.tokens = { input_tokens: 100, output_tokens: 1000, cache_read_tokens: 200, cache_creation_tokens: 100 };
+  await connect(page);
+  await expect(page.getByRole("cell", { name: "50.0%", exact: true })).toBeVisible();
+  state.tokens = { input_tokens: 0, output_tokens: 10, cache_read_tokens: 0, cache_creation_tokens: 0 };
+  await page.getByRole("button", { name: "刷新账单" }).click();
+  await expect(page.getByRole("cell", { name: "—", exact: true })).toBeVisible();
 });

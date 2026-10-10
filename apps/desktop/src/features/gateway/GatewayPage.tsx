@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { gateway, type GatewayStatus, type Records, type Usage } from "./api";
+import { gateway, type GatewayStatus, type Records, type Usage, type UsageRecord } from "./api";
 import { appStore } from "../../shared/store/appStore";
 import { Button } from "../../shared/ui/Button";
 import { Card } from "../../shared/ui/Card";
@@ -10,6 +10,14 @@ import styles from "./GatewayPage.module.scss";
 const money = (value: number | undefined) => value == null ? "—" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 8 }).format(value);
 const failure = (error: unknown) => error instanceof Error ? error.message : "请求失败，请重试";
 const effortLabels: Record<string, string> = { low: "低", medium: "中", high: "高", xhigh: "超高" };
+
+// 与 sub2api 保持相同口径，输出 Token 不参与缓存命中率计算。
+function cacheRate(row: UsageRecord): string {
+  const tokens = [row.input_tokens, row.cache_read_tokens, row.cache_creation_tokens];
+  if (tokens.some(value => !Number.isFinite(value) || value < 0)) return "—";
+  const total = tokens.reduce((sum, value) => sum + value, 0);
+  return total > 0 ? `${(row.cache_read_tokens / total * 100).toFixed(1)}%` : "—";
+}
 
 export function GatewayPage() {
   const [status, setStatus] = useState<GatewayStatus | null>(null);
@@ -142,15 +150,15 @@ export function GatewayPage() {
         </form>
         {recordsError ? <p role="alert" className={styles.error}>{recordsError}</p> : <div className={styles.tableWrap} aria-busy={loading}>
           <table><caption className={styles.caption}>调用明细，费用单位 USD</caption><thead><tr>
-            <th scope="col">时间</th><th scope="col">模型</th><th scope="col">推理等级</th><th scope="col">Token</th><th scope="col">扣费</th><th scope="col">耗时</th>
+            <th scope="col">时间</th><th scope="col">模型</th><th scope="col">推理等级</th><th scope="col">Token</th><th scope="col" title="缓存读取 ÷（普通输入 + 缓存读取 + 缓存写入）">缓存率</th><th scope="col">扣费</th><th scope="col">耗时</th>
           </tr></thead><tbody>
             {records?.items.map(row => <tr key={row.id}>
               <td>{new Date(row.created_at).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false })}</td>
               <td>{row.model}</td><td>{row.reasoning_effort ? effortLabels[row.reasoning_effort] ?? row.reasoning_effort : "未记录"}</td>
               <td><div>输入 {row.input_tokens.toLocaleString()} / 输出 {row.output_tokens.toLocaleString()}</div><small>缓存读取 {row.cache_read_tokens.toLocaleString()} / 写入 {row.cache_creation_tokens.toLocaleString()}</small></td>
-              <td>{money(row.actual_cost)}</td><td>{row.duration_ms == null ? "—" : `${(row.duration_ms / 1000).toFixed(2)} 秒`}</td>
+              <td>{cacheRate(row)}</td><td>{money(row.actual_cost)}</td><td>{row.duration_ms == null ? "—" : `${(row.duration_ms / 1000).toFixed(2)} 秒`}</td>
             </tr>)}
-            {!records?.items.length && <tr><td colSpan={6} className={styles.empty}>{loading ? "正在读取账单…" : "所选时间暂无已入账记录"}</td></tr>}
+            {!records?.items.length && <tr><td colSpan={7} className={styles.empty}>{loading ? "正在读取账单…" : "所选时间暂无已入账记录"}</td></tr>}
           </tbody></table>
         </div>}
         <div className={styles.pagination}>

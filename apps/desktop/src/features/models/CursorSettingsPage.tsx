@@ -12,13 +12,11 @@ export function CursorSettingsPage() {
   const { models, cursorHarness, cursorBusy } = useAppStore();
   const [command, setCommand] = useState<string | null>(null);
   const [confirmDisable, setConfirmDisable] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [result, setResult] = useState("");
   const [error, setError] = useState("");
   const model = models.find(item => item.group_name === "宝马ai" && item.base_url === "https://ai.bmapi.me");
   const ready = cursorHarness?.ca === "ready";
   const automatic = cursorHarness?.platform === "windows";
-  const enabled = cursorHarness?.settings_applied ?? false;
+  const enabled = cursorHarness?.integration === "enabled" && cursorHarness.settings_applied;
 
   async function initialize() {
     setError("");
@@ -31,21 +29,10 @@ export function CursorSettingsPage() {
     catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     setCommand(null);
   }
-  async function test() {
-    if (!model) return;
-    setTesting(true); setError(""); setResult("");
-    try {
-      const next = await api.testModel(model.model_hash, crypto.randomUUID());
-      setResult(`模型连接成功，耗时 ${(next.duration_ms / 1000).toFixed(2)} 秒。`);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
-    finally { setTesting(false); }
-  }
   const content = <div className={styles.page}>
-    <Card className={styles.card}>
-      <h2>连接服务</h2>
-      <p>{model ? "已配置：宝马ai · gpt-6-sol" : "请先到“我的服务”填写管理员提供的 Key。"}</p>
-      <Link to="/">前往我的服务 →</Link>
-    </Card>
+    {!model && <Card className={styles.card}>
+      <Link to="/">请先填写 Key →</Link>
+    </Card>}
     {!automatic && <Card className={styles.card}>
       <h2>2. 初始化本地证书</h2>
       <p>{ready ? "本地证书已就绪。" : "首次使用需要初始化并信任本地证书，以便代理 Cursor 请求。"}</p>
@@ -54,26 +41,25 @@ export function CursorSettingsPage() {
         <Button disabled={cursorBusy} onClick={() => void appStore.refresh()}>刷新证书状态</Button>
       </div>
     </Card>}
-    <Card className={styles.card}>
-      <h2>连接 Cursor</h2>
-      <p>当前状态：{enabled ? "已连接" : "未连接"}。连接时会关闭 Cursor 以应用配置，请先保存工作。完成后重新打开 Cursor，新开对话并选择“宝马ai · gpt-6-sol”。</p>
-      {automatic && <p>软件会自动安装本地证书并配置代理，首次使用请在 Windows 授权提示中选择“是”，无需输入命令。</p>}
-      <div className={styles.actions}>
-        <Button variant="primary" disabled={cursorBusy || (!enabled && ((!automatic && !ready) || !model))} onClick={() => enabled ? setConfirmDisable(true) : void appStore.setCursorEnabled(true)}>{cursorBusy ? "正在配置，请留意系统授权…" : enabled ? "关闭接管" : "一键连接 Cursor"}</Button>
-        <Button disabled={!model || testing} onClick={() => void test()}>{testing ? "测试中…" : "测试模型连接"}</Button>
-      </div>
-      <p>模型连接测试会产生少量用量，以服务端实际扣费为准。</p>
-      {result && <p role="status">{result}</p>}
+    <Card className={`${styles.card} ${styles.serviceCard}`}>
+      <button type="button" className={`${styles.serviceButton} ${enabled ? styles.serviceRunning : ""}`}
+        aria-pressed={enabled} aria-busy={cursorBusy}
+        disabled={cursorBusy || !cursorHarness || (!enabled && ((!automatic && !ready) || !model))}
+        onClick={() => enabled ? setConfirmDisable(true) : void appStore.setCursorEnabled(true)}>
+        <span className={styles.serviceDot} aria-hidden="true" />
+        {cursorBusy ? "处理中…" : enabled ? "服务运行中 · 点击停止" : "点击启动服务"}
+      </button>
+      <p>点击启动服务，再打开 Cursor 选择宝马ai里的模型即可使用。</p>
       {error && <p role="alert" className={styles.error}>{error}</p>}
     </Card>
   </div>;
   return <>
-    <PageContent title="Cursor 配置" fixed sections={[{ key: "setup", estimatedHeight: 650, content }]} />
+    <PageContent title="Cursor 配置" fixed sections={[{ key: "setup", estimatedHeight: 350, content }]} />
     <ConfirmDialog open={command !== null} title="安装本地证书" cancelLabel="取消" confirmLabel="复制命令并打开终端" onCancel={() => setCommand(null)} onConfirm={() => void openTerminal()}>
       <p>在终端中粘贴以下命令，按系统提示完成授权后刷新证书状态。</p><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{command}</pre>
     </ConfirmDialog>
-    <ConfirmDialog open={confirmDisable} title="关闭 Cursor 接管？" cancelLabel="取消" confirmLabel="关闭接管" onCancel={() => setConfirmDisable(false)} onConfirm={() => { setConfirmDisable(false); void appStore.setCursorEnabled(false); }}>
-      <p>关闭后会移除 Cursor 本地代理配置。</p>
+    <ConfirmDialog open={confirmDisable} title="停止服务？" cancelLabel="取消" confirmLabel="停止服务" onCancel={() => setConfirmDisable(false)} onConfirm={() => { setConfirmDisable(false); void appStore.setCursorEnabled(false); }}>
+      <p>停止后 Cursor 将不再通过宝马ai代理。</p>
     </ConfirmDialog>
   </>;
 }
