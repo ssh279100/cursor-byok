@@ -123,10 +123,22 @@ fn create_main_window(
     let url = format!("http://{address}/__byok-api__/")
         .parse()
         .expect("local frontend URL");
+    // 按逻辑像素计算，避免高 DPI 屏幕下窗口超出工作区。
+    let (width, height) = app
+        .primary_monitor()?
+        .map(|monitor| {
+            let area = monitor.work_area();
+            let scale = monitor.scale_factor();
+            (
+                (area.size.width as f64 / scale - 32.0).clamp(320.0, 1480.0),
+                (area.size.height as f64 / scale - 48.0).clamp(240.0, 920.0),
+            )
+        })
+        .unwrap_or((1440.0, 900.0));
     let builder = WebviewWindowBuilder::new(app, MAIN_WINDOW_LABEL, WebviewUrl::External(url))
         .title("宝马ai")
-        .inner_size(820.0, 558.0)
-        .min_inner_size(820.0, 558.0)
+        .inner_size(width, height)
+        .min_inner_size(width.min(1000.0), height.min(640.0))
         .center()
         .background_color(Color(20, 20, 20, 255))
         .decorations(cfg!(target_os = "macos"))

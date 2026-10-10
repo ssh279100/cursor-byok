@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 
 async function setup(page: Page) {
-  const state = { tokens: { input_tokens: 167, output_tokens: 5, cache_read_tokens: 4224, cache_creation_tokens: 0 }, ca: "missing", enabled: false, cancelInstall: false, connected: false, key: "", effort: "", missingRecords: false, emptyRecords: false, requests: [] as string[] };
+  const state = { expiresAt: null as string | null, expiryKnown: true, syncError: false, modelIDs: ["gpt-6-sol"], recordCount: 1, tokens: { input_tokens: 167, output_tokens: 5, cache_read_tokens: 4224, cache_creation_tokens: 0 }, ca: "missing", enabled: false, cancelInstall: false, connected: false, key: "", effort: "", missingRecords: false, emptyRecords: false, requests: [] as string[] };
   await page.addInitScript(() => {
     localStorage.setItem("cursor-byok.locale", "zh-CN");
     if (!localStorage.getItem("cursor-byok.theme")) localStorage.setItem("cursor-byok.theme", "default-dark");
@@ -15,20 +15,25 @@ async function setup(page: Page) {
       if (route.request().method() === "PUT") {
         const input = route.request().postDataJSON();
         if (input.api_key === "bad-key") return reply({ message: "Key 无效、已停用或无访问权限" }, 502);
-        state.connected = true; state.key = input.api_key; state.effort = input.reasoning_effort;
+        state.connected = true; state.modelIDs = ["gpt-6-sol"]; state.key = input.api_key; state.effort = input.reasoning_effort;
       }
       if (route.request().method() === "DELETE") state.connected = false;
       return reply({ connected: state.connected, base_url: "https://ai.bmapi.me", model: "gpt-6-sol", reasoning_effort: state.effort });
     }
-    if (path === "/gateway/usage") return reply({ quota: { limit: 100, used: 0.0012288, remaining: 99.9987712 }, status: "active", usage: { today: { requests: 1, actual_cost: 0.0012288 } } });
+    if (path === "/gateway/usage") return reply({ quota: { limit: 100, used: 0.0012288, remaining: 99.9987712 }, status: "active", expires_at: state.expiresAt, expiry_known: state.expiryKnown, usage: { today: { requests: 1, actual_cost: 0.0012288 } } });
     if (path === "/gateway/records") {
       if (state.missingRecords) return reply({ message: "服务端尚未提供账单接口，请联系管理员更新服务" }, 502);
-      return reply({ page: Number(url.searchParams.get("page")), pages: 2, total: state.emptyRecords ? 0 : 21, items: state.emptyRecords ? [] : [{
-        id: 1, created_at: "2026-10-10T02:30:00Z", model: state.key === "second-test-key" ? "gpt-6-sol（新 Key）" : "gpt-6-sol",
+      return reply({ page: Number(url.searchParams.get("page")), pages: 2, total: state.emptyRecords ? 0 : 21, items: state.emptyRecords ? [] : Array.from({ length: state.recordCount }, (_, index) => ({
+        id: index + 1, created_at: "2026-10-10T02:30:00Z", model: state.key === "second-test-key" ? "gpt-6-sol（新 Key）" : "gpt-6-sol",
         reasoning_effort: "high", ...state.tokens, actual_cost: 0.0012288, duration_ms: 3330,
-      }] });
+      })) });
     }
-    if (path === "/models") return reply(state.connected ? [{ model_hash: "test-model", group_name: "宝马ai", base_url: "https://ai.bmapi.me", model_id: "gpt-6-sol", api_key: "" }] : []);
+    if (path === "/gateway/models/sync") {
+      if (state.syncError) return reply({ message: "获取模型失败，原配置已保留" }, 502);
+      state.modelIDs = ["gpt-6-sol", "gpt-6.1-sol", "gpt-6-astra"];
+      return reply({ models: state.modelIDs, count: state.modelIDs.length });
+    }
+    if (path === "/models") return reply(state.connected ? state.modelIDs.map(id => ({ model_hash: id, group_name: "宝马ai", base_url: "https://ai.bmapi.me", model_id: id, api_key: "" })) : []);
     if (path === "/llm-calls" || path === "/plugins") return reply([]);
     if (path === "/overview") return reply({ metrics: {}, token_usage_series: [] });
     if (path === "/harness/cursor/status") return reply({ platform: "windows", ca: state.ca, integration: state.enabled ? "enabled" : "disabled", settings_applied: state.enabled });
@@ -48,6 +53,7 @@ async function setup(page: Page) {
 }
 
 async function connect(page: Page, key = "first-test-key") {
+  if (!await page.getByLabel("API Key", { exact: true }).isVisible()) await page.getByRole("button", { name: "Key 设置", exact: true }).click();
   await page.getByLabel("API Key", { exact: true }).fill(key);
   await page.getByRole("button", { name: /验证并/ }).click();
 }
@@ -72,6 +78,7 @@ test("填写 Key、查看账单、翻页、换 Key、重启页面和移除", asy
   await page.reload();
   await expect(page.getByRole("cell", { name: "gpt-6-sol（新 Key）" })).toBeVisible();
   expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain("test-key");
+  await page.getByRole("button", { name: "Key 设置", exact: true }).click();
   await page.getByRole("button", { name: "移除 Key" }).click();
   await expect(page.getByRole("heading", { name: "调用账单" })).toHaveCount(0);
   expect(state.requests.some(path => /promotions|update/.test(path))).toBe(false);
@@ -86,7 +93,7 @@ test("错误 Key 与未部署接口可恢复，不伪造记录", async ({ page }
   state.missingRecords = true;
   await connect(page);
   await expect(page.getByRole("alert")).toContainText("服务端尚未提供账单接口");
-  await expect(page.getByText("$99.9987712")).toBeVisible();
+  await expect(page.getByTitle("$99.9987712")).toBeVisible();
   state.missingRecords = false; state.emptyRecords = true;
   await page.getByRole("button", { name: "刷新账单" }).click();
   await expect(page.getByText("所选时间暂无已入账记录")).toBeVisible();
@@ -147,4 +154,37 @@ test("缓存率包含缓存写入、不计输出，零输入不伪造比例", as
   state.tokens = { input_tokens: 0, output_tokens: 10, cache_read_tokens: 0, cache_creation_tokens: 0 };
   await page.getByRole("button", { name: "刷新账单" }).click();
   await expect(page.getByRole("cell", { name: "—", exact: true })).toBeVisible();
+});
+
+
+test("额度有效期、模型获取和默认尺寸账单完整展示", async ({ page }) => {
+  await page.setViewportSize({ width: 1480, height: 920 });
+  const state = await setup(page);
+  state.expiresAt = "2027-03-15T06:30:00Z";
+  state.recordCount = 5;
+  await connect(page);
+  await expect(page.getByText("2027/03/15", { exact: true })).toBeVisible();
+  await expect(page.getByText("14:30:00（北京时间）", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("API Key", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "获取可用模型" }).click();
+  await expect(page.getByRole("status")).toContainText("已保存 3 个模型");
+  await page.getByText("查看已配置模型 · 3", { exact: true }).click();
+  await expect(page.getByText("gpt-6.1-sol", { exact: true })).toBeVisible();
+  await page.getByText("查看已配置模型 · 3", { exact: true }).click();
+  await expect(page.getByRole("region", { name: "调用明细" })).toBeInViewport();
+  const metrics = await page.getByRole("region", { name: "调用明细" }).evaluate(el => ({ width: el.clientWidth, scroll: el.scrollWidth, bottom: el.getBoundingClientRect().bottom }));
+  expect(metrics.scroll).toBeLessThanOrEqual(metrics.width);
+  expect(metrics.bottom).toBeLessThanOrEqual(920);
+  await expect(page.getByRole("cell", { name: "3.33 秒" }).first()).toHaveCSS("white-space", "nowrap");
+  await page.screenshot({ path: "test-results/dashboard-redesign-dark.png", fullPage: true });
+  state.syncError = true;
+  await page.getByRole("button", { name: "获取可用模型" }).click();
+  await expect(page.getByRole("alert")).toContainText("原配置已保留");
+  expect(state.modelIDs).toHaveLength(3);
+  state.expiresAt = null;
+  await page.getByRole("button", { name: "刷新账单" }).click();
+  await expect(page.getByText("长期有效", { exact: true })).toBeVisible();
+  state.expiryKnown = false;
+  await page.getByRole("button", { name: "刷新账单" }).click();
+  await expect(page.getByText("长期有效", { exact: true })).toHaveCount(0);
 });

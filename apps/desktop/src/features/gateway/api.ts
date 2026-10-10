@@ -8,6 +8,8 @@ export interface GatewayStatus {
 export interface Usage {
   quota: { limit: number; used: number; remaining: number } | null;
   status: string | null;
+  expires_at: string | null;
+  expiry_known: boolean;
   usage: { today: { requests: number; actual_cost: number } } | null;
 }
 
@@ -43,6 +45,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const gateway = {
   status: () => request<GatewayStatus>(""),
+  syncModels: () => request<{ models: string[]; count: number }>("/models/sync", { method: "POST" }),
   connect: (api_key: string, reasoning_effort: string) => request<GatewayStatus>("", {
     method: "PUT", body: JSON.stringify({ api_key, reasoning_effort: reasoning_effort || null }),
   }),

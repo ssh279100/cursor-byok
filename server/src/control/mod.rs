@@ -114,6 +114,7 @@ pub fn api_router(service: ControlService) -> Router {
         .route("/__byok-api__/api/gateway", get(gateway::status).put(gateway::connect).delete(gateway::disconnect))
         .route("/__byok-api__/api/gateway/usage", get(gateway::usage))
         .route("/__byok-api__/api/gateway/records", get(gateway::records))
+        .route("/__byok-api__/api/gateway/models/sync", post(gateway::sync_models))
         .route(
             "/__byok-api__/api/models",
             get(models::list).post(models::create),

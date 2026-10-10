@@ -37,9 +37,7 @@ fn first_page() -> u32 {
 }
 
 fn managed(model: &ModelConfig) -> bool {
-    model.base_url == BASE_URL
-        && model.model_id == MODEL_ID
-        && model.group_name.as_deref() == Some(GROUP_NAME)
+    model.base_url == BASE_URL && model.group_name.as_deref() == Some(GROUP_NAME)
 }
 
 async fn current(service: &ControlService) -> Result<Option<ModelConfig>> {
@@ -104,33 +102,100 @@ pub async fn connect(
     if usage.get("isValid").and_then(Value::as_bool) != Some(true) {
         return Err(Error::Provider("Key 验证未通过".into()));
     }
-    let model = preset(key, effort)?;
-    let saved = match current(&service).await? {
-        Some(existing) => {
-            service
-                .store
-                .update_model(&existing.model_hash, &model)
-                .await?
-        }
-        None => service.store.create_model(&model).await?,
+    let existing = current(&service).await?;
+    let ids: Vec<String> = if existing.as_ref().is_some_and(|m| m.api_key == key) {
+        service
+            .store
+            .models()
+            .await?
+            .into_iter()
+            .filter(managed)
+            .map(|m| m.model_id)
+            .collect()
+    } else {
+        vec![MODEL_ID.into()]
     };
-    Ok(Json(view(Some(&saved))))
+    save_models(&service, key, effort, &ids).await?;
+    Ok(Json(view(current(&service).await?.as_ref())))
 }
 
+async fn save_models(
+    service: &ControlService,
+    key: &str,
+    effort: Option<&str>,
+    ids: &[String],
+) -> Result<()> {
+    let inputs = ids
+        .iter()
+        .enumerate()
+        .map(|(index, id)| {
+            let mut input = preset_model(key, effort, id)?;
+            input.sort_order = (index + 1) as i64;
+            Ok(input)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    service
+        .store
+        .replace_gateway_models(BASE_URL, GROUP_NAME, &inputs)
+        .await
+}
+
+fn discovered_ids(data: &Value) -> Result<Vec<String>> {
+    let rows = data["data"]
+        .as_array()
+        .ok_or_else(|| Error::Provider("模型列表格式不正确".into()))?;
+    if rows.is_empty() || rows.len() > 500 {
+        return Err(Error::Provider(
+            "没有可用模型或模型数量异常，原配置已保留".into(),
+        ));
+    }
+    let mut ids = std::collections::BTreeSet::new();
+    for row in rows {
+        let id = row["id"]
+            .as_str()
+            .filter(|id| !id.is_empty() && id.len() <= 200 && !id.chars().any(char::is_whitespace))
+            .ok_or_else(|| Error::Provider("模型名称无效，原配置已保留".into()))?;
+        ids.insert(id.to_string());
+    }
+    Ok(ids.into_iter().collect())
+}
+
+pub async fn sync_models(State(service): State<ControlService>) -> Result<Json<Value>> {
+    let _guard = service.gateway_lock.lock().await;
+    let model = current(&service)
+        .await?
+        .ok_or_else(|| Error::Config("请先连接 Key".into()))?;
+    let ids = discovered_ids(&fetch(&model.api_key, "/v1/models", &[]).await?)?;
+    save_models(
+        &service,
+        &model.api_key,
+        model.reasoning_effort.as_deref(),
+        &ids,
+    )
+    .await?;
+    Ok(Json(json!({ "models": ids, "count": ids.len() })))
+}
+
+#[cfg(test)]
 fn preset(key: &str, effort: Option<&str>) -> Result<ModelConfigInput> {
+    preset_model(key, effort, MODEL_ID)
+}
+
+fn preset_model(key: &str, effort: Option<&str>, id: &str) -> Result<ModelConfigInput> {
     Ok(serde_json::from_value(json!({
-        "display_name": "宝马ai · gpt-6-sol", "group_name": GROUP_NAME,
+        "display_name": format!("宝马ai · {id}"), "group_name": GROUP_NAME,
         "type": "openai", "base_url": BASE_URL, "api_key": key,
-        "tooltip_data": "宝马ai", "model_id": MODEL_ID,
+        "tooltip_data": "宝马ai", "model_id": id,
         "reasoning_effort": effort, "openai_endpoint": "/v1/responses"
     }))?)
 }
 
 pub async fn disconnect(State(service): State<ControlService>) -> Result<Json<Value>> {
     let _guard = service.gateway_lock.lock().await;
-    if let Some(model) = current(&service).await? {
-        service.store.delete_model(&model.model_hash).await?;
-    }
+    service
+        .store
+        .replace_gateway_models(BASE_URL, GROUP_NAME, &[])
+        .await?;
     Ok(Json(view(None)))
 }
 
@@ -145,7 +210,7 @@ pub async fn usage(State(service): State<ControlService>) -> Result<Json<Value>>
     let data = fetch(&key(&service).await?, "/v1/usage", &[]).await?;
     // 不把共用账户的钱包余额显示为个人余额。
     Ok(Json(
-        json!({ "quota": data.get("quota"), "usage": data.get("usage"), "status": data.get("status") }),
+        json!({ "quota": data.get("quota"), "usage": data.get("usage"), "status": data.get("status"), "expires_at": data.get("expires_at"), "expiry_known": matches!(data.get("mode").and_then(Value::as_str), Some("quota_limited" | "unrestricted")) }),
     ))
 }
 
@@ -179,6 +244,83 @@ pub async fn records(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn model_discovery_rejects_bad_lists_and_deduplicates() {
+        assert_eq!(
+            discovered_ids(
+                &json!({"data": [{"id":"gpt-6-sol"}, {"id":"gpt-6-sol"}, {"id":"gpt-6-astra"}]})
+            )
+            .unwrap(),
+            vec!["gpt-6-astra", "gpt-6-sol"]
+        );
+        for data in [
+            json!({}),
+            json!({"data": []}),
+            json!({"data": [{"id": ""}]}),
+            json!({"data": [{"id": "bad\nmodel"}]}),
+        ] {
+            assert!(discovered_ids(&data).is_err());
+        }
+    }
+
+    #[tokio::test]
+    async fn model_sync_is_atomic_and_key_replacement_removes_old_credentials() {
+        let folder = tempfile::tempdir().unwrap();
+        let store = crate::store::Store::connect(&format!(
+            "sqlite://{}",
+            folder.path().join("sync.db").display()
+        ))
+        .await
+        .unwrap();
+        let inputs = vec![
+            preset_model("old-test-key", Some("low"), "gpt-6-sol").unwrap(),
+            preset_model("old-test-key", Some("low"), "gpt-6-astra").unwrap(),
+        ];
+        store
+            .replace_gateway_models(BASE_URL, GROUP_NAME, &inputs)
+            .await
+            .unwrap();
+        store
+            .replace_gateway_models(BASE_URL, GROUP_NAME, &inputs)
+            .await
+            .unwrap();
+        assert_eq!(store.models().await.unwrap().len(), 2);
+        let invalid = vec![inputs[0].clone(), inputs[0].clone()];
+        assert!(store
+            .replace_gateway_models(BASE_URL, GROUP_NAME, &invalid)
+            .await
+            .is_err());
+        assert_eq!(store.models().await.unwrap().len(), 2);
+        let mut unrelated = preset_model("unrelated-test-key", None, "other-model").unwrap();
+        unrelated.group_name = Some("其他服务".into());
+        store.create_model(&unrelated).await.unwrap();
+        store
+            .replace_gateway_models(
+                BASE_URL,
+                GROUP_NAME,
+                &[preset_model("new-test-key", Some("high"), "gpt-6-sol").unwrap()],
+            )
+            .await
+            .unwrap();
+        let models = store.models().await.unwrap();
+        assert_eq!(models.len(), 2);
+        assert!(models.iter().all(|m| m.api_key != "old-test-key"));
+        assert_eq!(
+            models
+                .iter()
+                .find(|m| managed(m))
+                .unwrap()
+                .reasoning_effort
+                .as_deref(),
+            Some("high")
+        );
+        store
+            .replace_gateway_models(BASE_URL, GROUP_NAME, &[])
+            .await
+            .unwrap();
+        assert_eq!(store.models().await.unwrap().len(), 1);
+    }
 
     #[tokio::test]
     async fn replacing_key_preserves_a_single_managed_model() {

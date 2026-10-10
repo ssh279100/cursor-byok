@@ -20,6 +20,59 @@ const MODEL_COLUMNS: &str = r#"
 "#;
 
 impl Store {
+    // 事务内替换网关模型，保留仍有效的模型和调用记录关联。
+    pub async fn replace_gateway_models(
+        &self,
+        base: &str,
+        group: &str,
+        inputs: &[ModelConfigInput],
+    ) -> Result<()> {
+        let mut normalized = Vec::new();
+        let mut hashes = HashSet::new();
+        for input in inputs {
+            let input = normalize_model_input(input)?;
+            if input.base_url != base || input.group_name.as_deref() != Some(group) {
+                return Err(Error::Config("模型不属于当前网关".into()));
+            }
+            let hash = model_hash(&input)?;
+            if !hashes.insert(hash.clone()) {
+                return Err(Error::Config("模型重复".into()));
+            }
+            normalized.push((hash, input));
+        }
+        let _write = self.writes.lock().await;
+        let mut tx = self.pool.begin().await?;
+        let existing: Vec<String> = sqlx::query_scalar(
+            "SELECT model_hash FROM model_configs WHERE base_url = ? AND group_name = ?",
+        )
+        .bind(base)
+        .bind(group)
+        .fetch_all(&mut *tx)
+        .await?;
+        for hash in &existing {
+            if !hashes.contains(hash) {
+                sqlx::query("UPDATE llm_calls SET model_hash = NULL WHERE model_hash = ?")
+                    .bind(hash)
+                    .execute(&mut *tx)
+                    .await?;
+                sqlx::query("DELETE FROM model_configs WHERE model_hash = ?")
+                    .bind(hash)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+        }
+        for (hash, input) in &normalized {
+            if existing.contains(hash) {
+                sqlx::query("UPDATE model_configs SET reasoning_effort = ?, sort_order = ?, updated_at_ms = ? WHERE model_hash = ?")
+                    .bind(&input.reasoning_effort).bind(input.sort_order).bind(now_ms()).bind(hash).execute(&mut *tx).await?;
+            } else {
+                insert_model(&mut tx, hash, input, now_ms()).await?;
+            }
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
     pub async fn models(&self) -> Result<Vec<ModelConfig>> {
         let query =
             format!("SELECT {MODEL_COLUMNS} FROM model_configs ORDER BY sort_order, display_name");
