@@ -17,6 +17,7 @@ export function CursorSettingsPage() {
   const [error, setError] = useState("");
   const model = models.find(item => item.group_name === "宝马ai" && item.base_url === "https://ai.bmapi.me");
   const ready = cursorHarness?.ca === "ready";
+  const automatic = cursorHarness?.platform === "windows";
   const enabled = cursorHarness?.settings_applied ?? false;
 
   async function initialize() {
@@ -41,23 +42,24 @@ export function CursorSettingsPage() {
   }
   const content = <div className={styles.page}>
     <Card className={styles.card}>
-      <h2>1. 连接服务</h2>
+      <h2>连接服务</h2>
       <p>{model ? "已配置：宝马ai · gpt-6-sol" : "请先到“我的服务”填写管理员提供的 Key。"}</p>
       <Link to="/">前往我的服务 →</Link>
     </Card>
-    <Card className={styles.card}>
+    {!automatic && <Card className={styles.card}>
       <h2>2. 初始化本地证书</h2>
       <p>{ready ? "本地证书已就绪。" : "首次使用需要初始化并信任本地证书，以便代理 Cursor 请求。"}</p>
       <div className={styles.actions}>
         {!ready && <Button disabled={cursorBusy} onClick={() => void initialize()}>初始化 / 安装证书</Button>}
         <Button disabled={cursorBusy} onClick={() => void appStore.refresh()}>刷新证书状态</Button>
       </div>
-    </Card>
+    </Card>}
     <Card className={styles.card}>
-      <h2>3. 开启 Cursor 接管</h2>
-      <p>当前状态：{enabled ? "已开启" : "未开启"}。首次开启后，请完全退出并重启 Cursor，新开对话并选择“宝马ai · gpt-6-sol”，不要选择 Auto。</p>
+      <h2>连接 Cursor</h2>
+      <p>当前状态：{enabled ? "已连接" : "未连接"}。连接时会关闭 Cursor 以应用配置，请先保存工作。完成后重新打开 Cursor，新开对话并选择“宝马ai · gpt-6-sol”。</p>
+      {automatic && <p>软件会自动安装本地证书并配置代理，首次使用请在 Windows 授权提示中选择“是”，无需输入命令。</p>}
       <div className={styles.actions}>
-        <Button variant="primary" disabled={cursorBusy || (!enabled && (!ready || !model))} onClick={() => enabled ? setConfirmDisable(true) : void appStore.setCursorEnabled(true)}>{enabled ? "关闭接管" : "开启接管"}</Button>
+        <Button variant="primary" disabled={cursorBusy || (!enabled && ((!automatic && !ready) || !model))} onClick={() => enabled ? setConfirmDisable(true) : void appStore.setCursorEnabled(true)}>{cursorBusy ? "正在配置，请留意系统授权…" : enabled ? "关闭接管" : "一键连接 Cursor"}</Button>
         <Button disabled={!model || testing} onClick={() => void test()}>{testing ? "测试中…" : "测试模型连接"}</Button>
       </div>
       <p>模型连接测试会产生少量用量，以服务端实际扣费为准。</p>

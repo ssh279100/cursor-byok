@@ -154,8 +154,10 @@ impl CursorHarness {
 
     pub async fn set_enabled(&self, enabled: bool) -> Result<CursorHarnessStatus> {
         if enabled {
-            self.inner.store.set_cursor_takeover_enabled(true).await?;
+            #[cfg(target_os = "windows")]
+            self.initialize_ca().await?;
             self.enable().await?;
+            self.inner.store.set_cursor_takeover_enabled(true).await?;
         } else {
             self.inner.store.set_cursor_takeover_enabled(false).await?;
             self.disable().await?;

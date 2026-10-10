@@ -113,6 +113,8 @@ impl CaManager {
             CaState::Missing => self.generate()?,
             CaState::Untrusted => {}
         }
+        #[cfg(target_os = "windows")]
+        windows::install(&fs::read_to_string(self.cert_path())?)?;
         Ok(())
     }
 

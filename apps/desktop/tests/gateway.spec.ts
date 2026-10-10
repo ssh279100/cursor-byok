@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 
 async function setup(page: Page) {
-  const state = { connected: false, key: "", effort: "", missingRecords: false, emptyRecords: false, requests: [] as string[] };
+  const state = { ca: "missing", enabled: false, cancelInstall: false, connected: false, key: "", effort: "", missingRecords: false, emptyRecords: false, requests: [] as string[] };
   await page.addInitScript(() => {
     localStorage.setItem("cursor-byok.locale", "zh-CN");
     if (!localStorage.getItem("cursor-byok.theme")) localStorage.setItem("cursor-byok.theme", "default-dark");
@@ -31,7 +31,13 @@ async function setup(page: Page) {
     if (path === "/models") return reply(state.connected ? [{ model_hash: "test-model", group_name: "宝马ai", base_url: "https://ai.bmapi.me", model_id: "gpt-6-sol", api_key: "" }] : []);
     if (path === "/llm-calls" || path === "/plugins") return reply([]);
     if (path === "/overview") return reply({ metrics: {}, token_usage_series: [] });
-    if (path === "/harness/cursor/status") return reply({ ca: "ready", settings_applied: false });
+    if (path === "/harness/cursor/status") return reply({ platform: "windows", ca: state.ca, settings_applied: state.enabled });
+    if (path === "/harness/cursor/enabled") {
+      if (state.cancelInstall) return reply({ message: "证书授权被取消，请重试" }, 400);
+      state.enabled = route.request().postDataJSON().enabled;
+      state.ca = "ready";
+      return reply({ platform: "windows", ca: state.ca, settings_applied: state.enabled });
+    }
     if (path === "/settings/ports") return reply({ proxy_port: 0, service_port: 0 });
     if (path === "/settings/observability") return reply({ detailed: false });
     if (path === "/plugins/runtime") return reply({ state: "uninitialized" });
@@ -104,8 +110,27 @@ test("小窗口和浅色主题，Cursor 配置保留引导", async ({ page }) =>
   await page.getByRole("button", { name: "下一页" }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: "test-results/gateway-light-table.png", fullPage: true });
   await page.getByRole("link", { name: "Cursor 配置", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "3. 开启 Cursor 接管" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "开启接管", exact: true })).toBeEnabled();
+  await expect(page.getByRole("heading", { name: "连接 Cursor" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "一键连接 Cursor", exact: true })).toBeEnabled();
   await expect(page.getByText("添加模型", { exact: true })).toHaveCount(0);
   await page.screenshot({ path: "test-results/cursor-setup.png", fullPage: true });
+});
+
+
+test("首次连接自动配置，取消授权后可重试和关闭", async ({ page }) => {
+  const state = await setup(page);
+  await connect(page);
+  await page.getByRole("link", { name: "Cursor 配置", exact: true }).click();
+  await expect(page.getByRole("button", { name: "初始化 / 安装证书" })).toHaveCount(0);
+  state.cancelInstall = true;
+  await page.getByRole("button", { name: "一键连接 Cursor", exact: true }).click();
+  await expect(page.getByText("证书授权被取消，请重试", { exact: true })).toBeVisible();
+  expect(state.enabled).toBe(false);
+  state.cancelInstall = false;
+  await page.getByRole("button", { name: "一键连接 Cursor", exact: true }).click();
+  await expect(page.getByText("当前状态：已连接", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "关闭接管", exact: true }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "关闭接管", exact: true }).click();
+  await expect(page.getByRole("button", { name: "一键连接 Cursor", exact: true })).toBeEnabled();
+  expect(state.enabled).toBe(false);
 });
