@@ -42,13 +42,11 @@ impl Store {
         }
         let _write = self.writes.lock().await;
         let mut tx = self.pool.begin().await?;
-        let existing: Vec<String> = sqlx::query_scalar(
-            "SELECT model_hash FROM model_configs WHERE base_url = ? AND group_name = ?",
-        )
-        .bind(base)
-        .bind(group)
-        .fetch_all(&mut *tx)
-        .await?;
+        let existing: Vec<String> =
+            sqlx::query_scalar("SELECT model_hash FROM model_configs WHERE group_name = ?")
+                .bind(group)
+                .fetch_all(&mut *tx)
+                .await?;
         for hash in &existing {
             if !hashes.contains(hash) {
                 sqlx::query("UPDATE llm_calls SET model_hash = NULL WHERE model_hash = ?")

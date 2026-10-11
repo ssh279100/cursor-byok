@@ -31,6 +31,7 @@ pub struct App {
 impl App {
     pub async fn new(mut config: Config) -> Result<Self> {
         let store = Store::connect(&config.database_url).await?;
+        control::remove_obsolete_models(&store).await?;
         if config.use_persisted_ports {
             config
                 .listen_addr

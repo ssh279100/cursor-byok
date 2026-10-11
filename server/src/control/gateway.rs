@@ -41,6 +41,16 @@ fn managed(model: &ModelConfig) -> bool {
     model.base_url == BASE_URL && model.group_name.as_deref() == Some(GROUP_NAME)
 }
 
+// 启动时删除内置组的废弃配置，历史调用记录由现有删除逻辑保留。
+pub(crate) async fn remove_obsolete_models(store: &crate::store::Store) -> Result<()> {
+    for model in store.models().await? {
+        if model.group_name.as_deref() == Some(GROUP_NAME) && model.base_url != BASE_URL {
+            store.delete_model(&model.model_hash).await?;
+        }
+    }
+    Ok(())
+}
+
 async fn current(service: &ControlService) -> Result<Option<ModelConfig>> {
     Ok(service.store.models().await?.into_iter().find(managed))
 }
@@ -269,6 +279,52 @@ pub async fn records(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn obsolete_gateway_models_are_removed_without_touching_current_or_other_groups() {
+        let folder = tempfile::tempdir().unwrap();
+        let store = crate::store::Store::connect(&format!(
+            "sqlite://{}",
+            folder.path().join("obsolete.db").display()
+        ))
+        .await
+        .unwrap();
+        let current = store
+            .create_model(&preset("current-test-key", None).unwrap())
+            .await
+            .unwrap();
+        let mut obsolete = preset("obsolete-test-key", None).unwrap();
+        obsolete.base_url = "https://obsolete.example".into();
+        let removed = store.create_model(&obsolete).await.unwrap();
+        let mut unrelated = obsolete.clone();
+        unrelated.group_name = Some("其他服务".into());
+        unrelated.api_key = "unrelated-test-key".into();
+        let preserved = store.create_model(&unrelated).await.unwrap();
+
+        remove_obsolete_models(&store).await.unwrap();
+        assert!(store.model(&removed.model_hash).await.unwrap().is_none());
+        assert!(store.model(&current.model_hash).await.unwrap().is_some());
+        assert!(store.model(&preserved.model_hash).await.unwrap().is_some());
+
+        store.create_model(&obsolete).await.unwrap();
+        store
+            .replace_gateway_models(
+                BASE_URL,
+                GROUP_NAME,
+                &[preset("new-test-key", None).unwrap()],
+            )
+            .await
+            .unwrap();
+        let models = store.models().await.unwrap();
+        assert_eq!(models.len(), 2);
+        assert!(models
+            .iter()
+            .any(|model| model.model_hash == preserved.model_hash));
+        assert!(models
+            .iter()
+            .filter(|model| model.group_name.as_deref() == Some(GROUP_NAME))
+            .all(|model| model.base_url == BASE_URL && model.api_key == "new-test-key"));
+    }
 
     #[test]
     fn model_discovery_rejects_bad_lists_and_deduplicates() {

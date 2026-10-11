@@ -21,6 +21,7 @@ use tower_http::{
 };
 use url::{Host, Url};
 
+pub(crate) use gateway::remove_obsolete_models;
 pub use service::{
     CallDetail, CallSummary, ControlService, DiscoveredModels, LegacyModelImportPreview,
     LegacyModelImportResult, ModelConnectivityResult, ModelDiscoveryInput, ObservabilitySettings,
