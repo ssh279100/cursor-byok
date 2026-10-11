@@ -81,6 +81,7 @@ let harnessStatus: CursorHarnessStatus = {
   enabled_models: models.length,
   integration: "enabled",
   settings_applied: true,
+  takeover_enabled: true,
   proxy_url: "http://127.0.0.1:54321",
   ca_install_command: null,
 };
@@ -135,6 +136,7 @@ export function installDemoApi() {
         ...harnessStatus,
         integration: enabled ? "enabled" : "disabled",
         settings_applied: enabled,
+        takeover_enabled: enabled,
         proxy_url: enabled ? "http://127.0.0.1:54321" : null,
       };
       return json(harnessStatus);

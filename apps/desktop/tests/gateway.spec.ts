@@ -7,7 +7,7 @@ async function setup(page: Page) {
     syncError: false, modelIDs: ["gpt-6-sol"], recordCount: 1,
     tokens: { input_tokens: 167, output_tokens: 125, cache_read_tokens: 4224, cache_creation_tokens: 0 },
     firstTokenMs: 7140 as number | null, durationMs: 10380 as number | null, outputTps: 125 / 10.38 as number | null,
-    ca: "missing", enabled: false, cancelInstall: false, connected: false, key: "", effort: "",
+    ca: "missing", enabled: false, takeoverEnabled: true, cancelInstall: false, connected: false, key: "", effort: "",
     missingRecords: false, emptyRecords: false, requests: [] as string[], recordQueries: [] as URLSearchParams[],
   };
   await page.addInitScript(() => {
@@ -28,7 +28,7 @@ async function setup(page: Page) {
         state.connected = true; state.modelIDs = ["gpt-6-sol"]; state.key = input.api_key; state.effort = input.reasoning_effort;
       }
       if (route.request().method() === "DELETE") state.connected = false;
-      return reply({ connected: state.connected, base_url: "http://154.201.79.53:8080", model: "gpt-6-sol", reasoning_effort: state.effort });
+      return reply({ connected: state.connected, api_key: state.connected ? state.key : "", base_url: "http://154.201.79.53:8080", model: "gpt-6-sol", reasoning_effort: state.effort });
     }
     if (path === "/gateway/usage") return reply({
       quota: state.quota ? { limit: 100, used: 0.0012288, remaining: 99.9987712 } : null,
@@ -55,11 +55,11 @@ async function setup(page: Page) {
     if (path === "/models") return reply(state.connected ? state.modelIDs.map(id => ({ model_hash: id, group_name: "宝马ai", base_url: "http://154.201.79.53:8080", model_id: id, api_key: "" })) : []);
     if (path === "/llm-calls" || path === "/plugins") return reply([]);
     if (path === "/overview") return reply({ metrics: {}, token_usage_series: [] });
-    if (path === "/harness/cursor/status") return reply({ platform: "windows", ca: state.ca, integration: state.enabled ? "enabled" : "disabled", settings_applied: state.enabled });
+    if (path === "/harness/cursor/status") return reply({ platform: "windows", ca: state.ca, integration: state.enabled ? "enabled" : "disabled", settings_applied: state.enabled, takeover_enabled: state.takeoverEnabled });
     if (path === "/harness/cursor/enabled") {
       if (state.cancelInstall) return reply({ message: "证书授权被取消，请重试" }, 400);
-      state.enabled = route.request().postDataJSON().enabled; state.ca = "ready";
-      return reply({ platform: "windows", ca: state.ca, integration: state.enabled ? "enabled" : "disabled", settings_applied: state.enabled });
+      state.enabled = route.request().postDataJSON().enabled; state.takeoverEnabled = state.enabled; state.ca = "ready";
+      return reply({ platform: "windows", ca: state.ca, integration: state.enabled ? "enabled" : "disabled", settings_applied: state.enabled, takeover_enabled: state.takeoverEnabled });
     }
     if (path === "/settings/ports") return reply({ proxy_port: 0, service_port: 0 });
     if (path === "/settings/observability") return reply({ detailed: false });
@@ -72,9 +72,9 @@ async function setup(page: Page) {
 
 async function connect(page: Page, key = "first-test-key") {
   await page.getByRole("link", { name: "我的服务", exact: true }).click();
-  if (!await page.getByLabel("API Key", { exact: true }).isVisible()) await page.getByRole("button", { name: "Key 设置", exact: true }).click();
   await page.getByLabel("API Key", { exact: true }).fill(key);
-  await page.getByRole("button", { name: /验证并/ }).click();
+  await page.getByRole("button", { name: "验证连接", exact: true }).click();
+  if (key !== "bad-key") await expect(page.getByText("Key 已连接", { exact: false })).toBeVisible();
 }
 
 async function usage(page: Page) {
@@ -117,7 +117,6 @@ test("独立菜单、按 Key 查看五项汇总、翻页、换 Key 和移除", a
   await expect(page.getByRole("cell", { name: "gpt-6-sol（新 Key）" })).toBeVisible();
   expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain("test-key");
   await page.getByRole("link", { name: "我的服务", exact: true }).click();
-  await page.getByRole("button", { name: "Key 设置", exact: true }).click();
   await page.getByRole("button", { name: "移除 Key" }).click();
   await expect(page.getByRole("heading", { name: "连接你的 Key" })).toBeVisible();
   await usage(page);
@@ -156,6 +155,7 @@ test("错误 Key、明细接口失败与空记录有清晰反馈，日期校验�
   const state = await setup(page);
   await connect(page, "bad-key");
   await expect(page.getByRole("alert")).toContainText("Key 无效");
+  expect(state.requests.filter(path => path === "/harness/cursor/enabled")).toHaveLength(0);
   state.missingRecords = true;
   await connect(page); await usage(page);
   await expect(page.getByRole("alert")).toContainText("服务端尚未提供账单接口");
@@ -215,30 +215,52 @@ test("未设限的 Key 展示累计消费，已到期 Key 保留账单", async (
 
 test("我的服务保留模型同步与错误反馈", async ({ page }) => {
   const state = await setup(page); await connect(page);
-  await expect(page.getByLabel("API Key", { exact: true })).toHaveCount(0);
-  await screenshot(page, "gateway-new-api-dark");
+  await expect(page.getByLabel("API Key", { exact: true })).toHaveValue("first-test-key");
+  await expect(page.getByLabel("API Key", { exact: true })).toHaveAttribute("type", "text");
+  await expect(page.getByRole("link", { name: "Cursor 配置", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "本机调试记录", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /收起|隐藏敏感内容|显示敏感内容/ })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "查看当前 Key 的使用情况" })).toHaveCount(0);
+  await expect(page.getByText("Q群:25963527", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "使用步骤" })).toContainText("关闭 Auto");
   await page.getByRole("button", { name: "获取可用模型" }).click();
   await expect(page.getByRole("status")).toContainText("已保存 3 个模型");
-  await page.getByText("查看已配置模型 · 3", { exact: true }).click();
+  await expect(page.getByText("gpt-6.1-sol", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "代理服务已开启", exact: true })).toHaveAttribute("aria-pressed", "true");
+  const widths = await page.locator("#key-settings").evaluate(el => ({ key: el.getBoundingClientRect().width, parent: el.parentElement!.clientWidth }));
+  expect(widths.key / widths.parent).toBeLessThan(0.53);
+  await screenshot(page, "gateway-1.0.2-dark");
+  await page.reload();
+  await expect(page.getByLabel("API Key", { exact: true })).toHaveValue("first-test-key");
   await expect(page.getByText("gpt-6.1-sol", { exact: true })).toBeVisible();
   state.syncError = true;
   await page.getByRole("button", { name: "获取可用模型" }).click();
   await expect(page.getByRole("alert")).toContainText("原配置已保留");
   expect(state.modelIDs).toHaveLength(3);
+  await page.evaluate(() => localStorage.setItem("cursor-byok.theme", "default-light"));
+  await page.setViewportSize({ width: 900, height: 720 }); await page.reload();
+  await expect(page.getByLabel("API Key", { exact: true })).toHaveValue("first-test-key");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await screenshot(page, "gateway-1.0.2-light-small");
 });
 
-test("Cursor 配置保留启动、取消授权后重试和停止服务", async ({ page }) => {
-  const state = await setup(page); await connect(page);
-  await page.getByRole("link", { name: "Cursor 配置", exact: true }).click();
+test("顶部代理默认开启，取消授权后可重试，单按钮停止并记住选择", async ({ page }) => {
+  const state = await setup(page);
   await expect(page.getByRole("button", { name: "初始化 / 安装证书" })).toHaveCount(0);
   state.cancelInstall = true;
-  await page.getByRole("button", { name: "点击启动服务", exact: true }).click();
+  await connect(page);
   await expect(page.getByText("证书授权被取消，请重试", { exact: true })).toBeVisible();
-  state.cancelInstall = false;
-  await page.getByRole("button", { name: "点击启动服务", exact: true }).click();
-  await expect(page.getByRole("button", { name: "服务运行中 · 点击停止" })).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("button", { name: "服务运行中 · 点击停止", exact: true }).click();
-  await page.getByRole("alertdialog").getByRole("button", { name: "停止服务", exact: true }).click();
-  await expect(page.getByRole("button", { name: "点击启动服务", exact: true })).toBeEnabled();
   expect(state.enabled).toBe(false);
+  expect(state.requests.filter(path => path === "/harness/cursor/enabled")).toHaveLength(1);
+  state.cancelInstall = false;
+  await page.getByRole("button", { name: "开启代理服务", exact: true }).click();
+  await expect(page.getByRole("button", { name: "代理服务已开启" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "代理服务已开启", exact: true }).click();
+  await expect(page.getByRole("button", { name: "开启代理服务", exact: true })).toBeEnabled();
+  expect(state.enabled).toBe(false);
+  const attempts = state.requests.filter(path => path === "/harness/cursor/enabled").length;
+  await page.reload();
+  await expect(page.getByLabel("API Key", { exact: true })).toHaveValue("first-test-key");
+  await expect(page.getByRole("button", { name: "开启代理服务", exact: true })).toBeEnabled();
+  expect(state.requests.filter(path => path === "/harness/cursor/enabled")).toHaveLength(attempts);
 });

@@ -103,6 +103,7 @@ export interface CursorHarnessStatus {
   enabled_models: number;
   integration: IntegrationState;
   settings_applied: boolean;
+  takeover_enabled: boolean;
   proxy_url: string | null;
   ca_install_command: string | null;
 }

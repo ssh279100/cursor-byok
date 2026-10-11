@@ -6,12 +6,12 @@ import { Card } from "../shared/ui/Card";
 import controls from "../shared/ui/Controls.module.scss";
 import { Icon } from "../shared/ui/Icon";
 import { TooltipTrigger } from "../shared/ui/TooltipTrigger";
-import { flatColorAreaChartIcon, flatColorBarChartIcon, flatColorSalesPerformanceIcon, flatColorSettingsIcon, refreshIcon } from "../shared/ui/icons";
+import { flatColorAreaChartIcon, flatColorBarChartIcon, flatColorSettingsIcon, refreshIcon } from "../shared/ui/icons";
 import { appStore, useAppStore } from "../shared/store/appStore";
 import styles from "./AppLayout.module.scss";
 import { PageActionsTarget } from "./PageActions";
 
-const keptAlivePages = ["/calls", "/settings", "/harness/cursor"];
+const keptAlivePages = ["/settings"];
 
 export function AppLayout() {
   const { busy } = useAppStore();
@@ -21,8 +21,6 @@ export function AppLayout() {
   const menuItems = [
     { path: "/", label: "我的服务", icon: flatColorAreaChartIcon },
     { path: "/usage", label: "使用明细", icon: flatColorBarChartIcon },
-    { path: "/harness/cursor", label: "Cursor 配置", icon: flatColorSettingsIcon },
-    { path: "/calls", label: "本机调试记录", icon: flatColorSalesPerformanceIcon },
     { path: "/settings", label: "系统设置", icon: flatColorSettingsIcon },
   ];
   return <PageLayout className={styles.root}>
@@ -33,7 +31,7 @@ export function AppLayout() {
             <Icon icon={item.icon} size="1.3em" /><span>{item.label}</span>
           </NavLink>
         </div>)}
-        <div className={styles.contact}>QQ:279100273</div>
+        <div className={styles.contact}>Q群:25963527</div>
       </nav>
     </Card>
     <main className={styles.content}>

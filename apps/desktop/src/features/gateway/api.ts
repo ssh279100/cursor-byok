@@ -1,5 +1,6 @@
 export interface GatewayStatus {
   connected: boolean;
+  api_key: string;
   base_url: string;
   model: string;
   reasoning_effort: string | null;

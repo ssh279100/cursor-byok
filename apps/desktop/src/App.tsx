@@ -5,9 +5,7 @@ import { MessageProvider } from "./shared/ui/MessageProvider";
 import { useMessage } from "./shared/ui/message";
 import { AppFrame } from "./shell/AppFrame";
 import { AppLayout } from "./shell/AppLayout";
-import { CallsPage } from "./features/calls/CallsPage";
 import { CallDetailsPage } from "./features/calls/CallDetailsPage";
-import { CursorSettingsPage } from "./features/models/CursorSettingsPage";
 import { GatewayPage } from "./features/gateway/GatewayPage";
 import { UsagePage } from "./features/usage/UsagePage";
 import { PluginManagementPage } from "./features/plugins/PluginManagementPage";
@@ -25,8 +23,6 @@ export function App() {
             <Route element={<AppLayout />}>
               <Route index element={<GatewayPage />} />
               <Route path="usage" element={<UsagePage />} />
-              <Route path="calls" element={<CallsPage />} />
-              <Route path="harness/cursor" element={<CursorSettingsPage />} />
               <Route path="plugins" element={<PluginManagementPage />} />
               <Route path="settings" element={<SettingsPage />} />
             </Route>

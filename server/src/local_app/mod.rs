@@ -59,6 +59,7 @@ pub struct CursorHarnessStatus {
     pub enabled_models: usize,
     pub integration: IntegrationState,
     pub settings_applied: bool,
+    pub takeover_enabled: bool,
     pub proxy_url: Option<String>,
     pub ca_install_command: Option<String>,
 }
@@ -113,7 +114,8 @@ impl CursorHarness {
         let configured_models = models.len();
         let enabled_models = configured_models;
         let ca = self.inner.ca.state()?;
-        if self.inner.store.cursor_takeover_enabled().await?
+        let takeover_enabled = self.inner.store.cursor_takeover_enabled().await?;
+        if takeover_enabled
             && matches!(ca, CaState::Ready)
             && self.inner.backend_addr.read().is_some()
         {
@@ -138,6 +140,7 @@ impl CursorHarness {
             enabled_models,
             integration,
             settings_applied,
+            takeover_enabled,
             proxy_url,
             ca_install_command: self.inner.ca.install_command(),
         })

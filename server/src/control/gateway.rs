@@ -1,6 +1,8 @@
 //! 宝马ai 的固定网关接入与账单查询。
 use axum::{
     extract::{Query, State},
+    http::header::CACHE_CONTROL,
+    response::{IntoResponse, Response},
     Json,
 };
 use serde::Deserialize;
@@ -59,11 +61,17 @@ fn view(model: Option<&ModelConfig>) -> Value {
     json!({
         "connected": model.is_some(), "base_url": BASE_URL, "model": MODEL_ID,
         "reasoning_effort": model.and_then(|m| m.reasoning_effort.as_deref()),
+        "api_key": model.map(|m| m.api_key.as_str()).unwrap_or(""),
     })
 }
 
-pub async fn status(State(service): State<ControlService>) -> Result<Json<Value>> {
-    Ok(Json(view(current(&service).await?.as_ref())))
+// 明文 Key 仅供本机设置页面使用，响应禁止缓存。
+fn settings_response(model: Option<&ModelConfig>) -> Response {
+    ([(CACHE_CONTROL, "no-store")], Json(view(model))).into_response()
+}
+
+pub async fn status(State(service): State<ControlService>) -> Result<Response> {
+    Ok(settings_response(current(&service).await?.as_ref()))
 }
 
 // 禁止重定向，确保凭据只发往固定网关；不向界面或日志透传服务端原始错误。
@@ -107,7 +115,7 @@ async fn usage_data(key: &str, path: &str, query: &[(String, String)]) -> Result
 pub async fn connect(
     State(service): State<ControlService>,
     Json(input): Json<ConnectInput>,
-) -> Result<Json<Value>> {
+) -> Result<Response> {
     let _guard = service.gateway_lock.lock().await;
     let key = input.api_key.trim();
     if key.is_empty() || key.len() > 4096 || key.chars().any(char::is_whitespace) || !key.is_ascii()
@@ -136,7 +144,7 @@ pub async fn connect(
         vec![MODEL_ID.into()]
     };
     save_models(&service, key, effort, &ids).await?;
-    Ok(Json(view(current(&service).await?.as_ref())))
+    Ok(settings_response(current(&service).await?.as_ref()))
 }
 
 async fn save_models(
@@ -210,13 +218,13 @@ fn preset_model(key: &str, effort: Option<&str>, id: &str) -> Result<ModelConfig
     }))?)
 }
 
-pub async fn disconnect(State(service): State<ControlService>) -> Result<Json<Value>> {
+pub async fn disconnect(State(service): State<ControlService>) -> Result<Response> {
     let _guard = service.gateway_lock.lock().await;
     service
         .store
         .replace_gateway_models(BASE_URL, GROUP_NAME, &[])
         .await?;
-    Ok(Json(view(None)))
+    Ok(settings_response(None))
 }
 
 async fn key(service: &ControlService) -> Result<String> {
@@ -433,9 +441,12 @@ mod tests {
         assert_eq!(models[0].api_key, "second-test-key");
         assert_eq!(models[0].reasoning_effort.as_deref(), Some("high"));
         assert!(managed(&models[0]));
-        assert!(!view(Some(&models[0]))
-            .to_string()
-            .contains("second-test-key"));
+        assert_eq!(view(Some(&models[0]))["api_key"], "second-test-key");
+        assert_eq!(
+            settings_response(Some(&models[0])).headers()[CACHE_CONTROL],
+            "no-store"
+        );
+        assert_eq!(view(None)["api_key"], "");
         store.delete_model(&second.model_hash).await.unwrap();
         assert!(store.models().await.unwrap().is_empty());
     }
