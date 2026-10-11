@@ -28,7 +28,7 @@ async function setup(page: Page) {
         state.connected = true; state.modelIDs = ["gpt-6-sol"]; state.key = input.api_key; state.effort = input.reasoning_effort;
       }
       if (route.request().method() === "DELETE") state.connected = false;
-      return reply({ connected: state.connected, api_key: state.connected ? state.key : "", base_url: "http://154.201.79.53:8080", model: "gpt-6-sol", reasoning_effort: state.effort });
+      return reply({ connected: state.connected, api_key: state.connected ? state.key : "", base_url: "https://cs.bmapi.me", model: "gpt-6-sol", reasoning_effort: state.effort });
     }
     if (path === "/gateway/usage") return reply({
       quota: state.quota ? { limit: 100, used: 0.0012288, remaining: 99.9987712 } : null,
@@ -52,7 +52,7 @@ async function setup(page: Page) {
       state.modelIDs = ["gpt-6-sol", "gpt-6.1-sol", "gpt-6-astra"];
       return reply({ models: state.modelIDs, count: state.modelIDs.length });
     }
-    if (path === "/models") return reply(state.connected ? state.modelIDs.map(id => ({ model_hash: id, group_name: "宝马ai", base_url: "http://154.201.79.53:8080", model_id: id, api_key: "" })) : []);
+    if (path === "/models") return reply(state.connected ? state.modelIDs.map(id => ({ model_hash: id, group_name: "宝马ai", base_url: "https://cs.bmapi.me", model_id: id, api_key: "" })) : []);
     if (path === "/llm-calls" || path === "/plugins") return reply([]);
     if (path === "/overview") return reply({ metrics: {}, token_usage_series: [] });
     if (path === "/harness/cursor/status") return reply({ platform: "windows", ca: state.ca, integration: state.enabled ? "enabled" : "disabled", settings_applied: state.enabled, takeover_enabled: state.takeoverEnabled });
@@ -229,7 +229,7 @@ test("我的服务保留模型同步与错误反馈", async ({ page }) => {
   await expect(page.getByRole("button", { name: "代理服务已开启", exact: true })).toHaveAttribute("aria-pressed", "true");
   const widths = await page.locator("#key-settings").evaluate(el => ({ key: el.getBoundingClientRect().width, parent: el.parentElement!.clientWidth }));
   expect(widths.key / widths.parent).toBeLessThan(0.53);
-  await screenshot(page, "gateway-1.0.2-dark");
+  await screenshot(page, "gateway-1.0.3-dark");
   await page.reload();
   await expect(page.getByLabel("API Key", { exact: true })).toHaveValue("first-test-key");
   await expect(page.getByText("gpt-6.1-sol", { exact: true })).toBeVisible();
@@ -241,7 +241,7 @@ test("我的服务保留模型同步与错误反馈", async ({ page }) => {
   await page.setViewportSize({ width: 900, height: 720 }); await page.reload();
   await expect(page.getByLabel("API Key", { exact: true })).toHaveValue("first-test-key");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await screenshot(page, "gateway-1.0.2-light-small");
+  await screenshot(page, "gateway-1.0.3-light-small");
 });
 
 test("顶部代理默认开启，取消授权后可重试，单按钮停止并记住选择", async ({ page }) => {

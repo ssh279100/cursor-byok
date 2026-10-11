@@ -74,7 +74,7 @@ export function GatewayPage() {
     } catch (cause) { setModelError(failure(cause)); }
     finally { setSyncing(false); }
   }
-  const managedModels = models.filter(model => model.group_name === "宝马ai" && model.base_url === "http://154.201.79.53:8080");
+  const managedModels = models.filter(model => model.group_name === "宝马ai" && model.base_url === "https://cs.bmapi.me");
 
   return <div className={`${styles.page} ${styles.dashboard}`}>
     <header className={styles.heading}>
@@ -88,7 +88,7 @@ export function GatewayPage() {
       </button>
     </header>
     {status?.connected && <div className={styles.connectionBar}>
-      <span className={styles.connectionInfo}><span className={styles.liveDot} /> Key 已连接 <small>154.201.79.53:8080 · {managedModels.length} 个模型</small></span>
+      <span className={styles.connectionInfo}><span className={styles.liveDot} /> Key 已连接 <small>cs.bmapi.me · {managedModels.length} 个模型</small></span>
       <div className={styles.actions}>
         <Button disabled={busy || syncing} onClick={() => void syncModels()}>{syncing ? "正在获取…" : "获取可用模型"}</Button>
       </div>
