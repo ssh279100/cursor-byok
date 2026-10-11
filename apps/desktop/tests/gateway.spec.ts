@@ -4,7 +4,7 @@ import { mkdir } from "node:fs/promises";
 async function setup(page: Page) {
   const state = {
     expiresAt: null as string | null, activatedAt: null as string | null, validityDays: 30 as number | null, quota: true,
-    syncError: false, modelIDs: ["gpt-6-sol"], recordCount: 1,
+    syncError: false, settingsDelayMs: 0, modelIDs: ["gpt-6-sol"], recordCount: 1,
     tokens: { input_tokens: 167, output_tokens: 125, cache_read_tokens: 4224, cache_creation_tokens: 0 },
     firstTokenMs: 7140 as number | null, durationMs: 10380 as number | null, outputTps: 125 / 10.38 as number | null,
     ca: "missing", enabled: false, takeoverEnabled: true, cancelInstall: false, connected: false, key: "", effort: "",
@@ -22,6 +22,10 @@ async function setup(page: Page) {
     const promptTokens = state.tokens.input_tokens + state.tokens.cache_read_tokens + state.tokens.cache_creation_tokens;
     const cacheHitRate = promptTokens > 0 ? state.tokens.cache_read_tokens / promptTokens * 100 : 0;
     if (path === "/gateway") {
+      // 模拟设置加载较慢，确保用户选择不会被初始化响应覆盖。
+      if (route.request().method() === "GET" && state.settingsDelayMs) {
+        await new Promise(resolve => setTimeout(resolve, state.settingsDelayMs));
+      }
       if (route.request().method() === "PUT") {
         const input = route.request().postDataJSON();
         if (input.api_key === "bad-key") return reply({ message: "Key 无效、已停用或无访问权限" }, 502);
@@ -91,6 +95,7 @@ test("独立菜单、按 Key 查看五项汇总、翻页、换 Key 和移除", a
   const state = await setup(page);
   await usage(page);
   await expect(page.getByRole("heading", { name: "连接 Key 后查看使用明细" })).toBeVisible();
+  state.settingsDelayMs = 500;
   await page.getByRole("link", { name: "前往我的服务 →" }).click();
   await page.getByLabel("推理等级", { exact: true }).selectOption("high");
   await connect(page);

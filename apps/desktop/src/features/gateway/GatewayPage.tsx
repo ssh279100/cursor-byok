@@ -16,6 +16,7 @@ export function GatewayPage() {
   const [modelNotice, setModelNotice] = useState("");
   const [modelError, setModelError] = useState("");
   const [status, setStatus] = useState<GatewayStatus | null>(null);
+  const [loading, setLoading] = useState(true);
   const [key, setKey] = useState("");
   const [effort, setEffort] = useState("");
   const [busy, setBusy] = useState(false);
@@ -29,7 +30,8 @@ export function GatewayPage() {
       setStatus(next);
       setKey(next.api_key);
       setEffort(next.reasoning_effort ?? "");
-    }).catch(cause => { if (!disposed) setError(failure(cause)); });
+    }).catch(cause => { if (!disposed) setError(failure(cause)); })
+      .finally(() => { if (!disposed) setLoading(false); });
     return () => { disposed = true; };
   }, []);
 
@@ -81,7 +83,7 @@ export function GatewayPage() {
       <div><p className={styles.eyebrow}>宝马ai / 服务中心</p><h1>我的服务</h1></div>
       <button type="button" className={`${styles.proxySwitch} ${enabled ? styles.proxyRunning : ""}`}
         aria-pressed={enabled} aria-busy={cursorBusy}
-        disabled={busy || cursorBusy || !cursorHarness || (!enabled && !status?.connected)}
+        disabled={loading || busy || cursorBusy || !cursorHarness || (!enabled && !status?.connected)}
         onClick={() => void appStore.setCursorEnabled(!enabled)}>
         <span className={styles.switchTrack} aria-hidden="true"><span /></span>
         {cursorBusy ? "代理服务处理中…" : enabled ? "代理服务已开启" : "开启代理服务"}
@@ -106,17 +108,17 @@ export function GatewayPage() {
           <label htmlFor="gateway-key">API Key</label>
           <TextInput id="gateway-key" type="text" value={key} onChange={event => setKey(event.target.value)}
             placeholder="输入你购买的 Key"
-            autoComplete="off" spellCheck={false} disabled={busy || syncing} required />
+            autoComplete="off" spellCheck={false} disabled={loading || busy || syncing} required />
         </div>
         <div className={styles.field}>
           <label htmlFor="gateway-effort">推理等级</label>
-          <select id="gateway-effort" value={effort} onChange={event => setEffort(event.target.value)} disabled={busy || syncing}>
+          <select id="gateway-effort" value={effort} onChange={event => setEffort(event.target.value)} disabled={loading || busy || syncing}>
             <option value="">模型默认</option>
             {Object.entries(effortLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </div>
         <div className={styles.actions}>
-          <Button type="submit" variant="primary" disabled={busy || syncing || cursorBusy || !key.trim()}>{busy ? "处理中…" : "验证连接"}</Button>
+          <Button type="submit" variant="primary" disabled={loading || busy || syncing || cursorBusy || !key.trim()}>{loading ? "加载设置…" : busy ? "处理中…" : "验证连接"}</Button>
           {status?.connected && <Button type="button" disabled={busy || syncing} onClick={() => void disconnect()}>移除 Key</Button>}
         </div>
       </form>
