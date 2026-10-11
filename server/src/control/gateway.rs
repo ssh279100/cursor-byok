@@ -30,6 +30,7 @@ pub struct RecordQuery {
     page: u32,
     start_date: Option<String>,
     end_date: Option<String>,
+    model: Option<String>,
 }
 
 fn first_page() -> u32 {
@@ -84,6 +85,15 @@ async fn fetch(key: &str, path: &str, query: &[(String, String)]) -> Result<Valu
         .map_err(|_| Error::Provider("网关返回的数据格式不正确".into()))
 }
 
+// 使用明细接口由 Key 验证身份，服务端只返回该 Key 的数据。
+async fn usage_data(key: &str, path: &str, query: &[(String, String)]) -> Result<Value> {
+    let response = fetch(key, path, query).await?;
+    if response.get("code").and_then(Value::as_i64) != Some(0) || !response["data"].is_object() {
+        return Err(Error::Provider("使用明细数据格式不正确".into()));
+    }
+    Ok(response["data"].clone())
+}
+
 pub async fn connect(
     State(service): State<ControlService>,
     Json(input): Json<ConnectInput>,
@@ -98,8 +108,8 @@ pub async fn connect(
     if effort.is_some_and(|s| !["low", "medium", "high", "xhigh"].contains(&s)) {
         return Err(Error::Config("不支持的推理等级".into()));
     }
-    let usage = fetch(key, "/v1/usage", &[]).await?;
-    if usage.get("isValid").and_then(Value::as_bool) != Some(true) {
+    let usage = usage_data(key, "/bmapi/v1/summary", &[]).await?;
+    if !usage["status"].is_string() || !usage["usage"]["total"].is_object() {
         return Err(Error::Provider("Key 验证未通过".into()));
     }
     let existing = current(&service).await?;
@@ -207,11 +217,20 @@ async fn key(service: &ControlService) -> Result<String> {
 }
 
 pub async fn usage(State(service): State<ControlService>) -> Result<Json<Value>> {
-    let data = fetch(&key(&service).await?, "/v1/usage", &[]).await?;
-    // 不把共用账户的钱包余额显示为个人余额。
     Ok(Json(
-        json!({ "quota": data.get("quota"), "usage": data.get("usage"), "status": data.get("status"), "expires_at": data.get("expires_at"), "expiry_known": matches!(data.get("mode").and_then(Value::as_str), Some("quota_limited" | "unrestricted")) }),
+        usage_data(&key(&service).await?, "/bmapi/v1/summary", &[]).await?,
     ))
+}
+
+pub async fn usage_models(State(service): State<ControlService>) -> Result<Json<Value>> {
+    let data = usage_data(&key(&service).await?, "/bmapi/v1/models", &[]).await?;
+    if !data["models"]
+        .as_array()
+        .is_some_and(|models| models.iter().all(Value::is_string))
+    {
+        return Err(Error::Provider("使用明细模型列表格式不正确".into()));
+    }
+    Ok(Json(data))
 }
 
 pub async fn records(
@@ -234,11 +253,17 @@ pub async fn records(
             query.push((name.into(), value));
         }
     }
-    let data = fetch(&key(&service).await?, "/bmapi/v1/records", &query).await?;
-    if data.get("code").and_then(Value::as_i64) != Some(0) || !data["data"]["items"].is_array() {
+    if let Some(model) = input.model.filter(|value| !value.is_empty()) {
+        if model.len() > 200 || model.chars().any(char::is_control) {
+            return Err(Error::Config("模型筛选条件不正确".into()));
+        }
+        query.push(("model".into(), model));
+    }
+    let data = usage_data(&key(&service).await?, "/bmapi/v1/records", &query).await?;
+    if !data["items"].is_array() {
         return Err(Error::Provider("账单数据格式不正确".into()));
     }
-    Ok(Json(data["data"].clone()))
+    Ok(Json(data))
 }
 
 #[cfg(test)]

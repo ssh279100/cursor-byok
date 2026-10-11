@@ -6,7 +6,7 @@ import { Card } from "../shared/ui/Card";
 import controls from "../shared/ui/Controls.module.scss";
 import { Icon } from "../shared/ui/Icon";
 import { TooltipTrigger } from "../shared/ui/TooltipTrigger";
-import { flatColorAreaChartIcon, flatColorSalesPerformanceIcon, flatColorSettingsIcon, refreshIcon } from "../shared/ui/icons";
+import { flatColorAreaChartIcon, flatColorBarChartIcon, flatColorSalesPerformanceIcon, flatColorSettingsIcon, refreshIcon } from "../shared/ui/icons";
 import { appStore, useAppStore } from "../shared/store/appStore";
 import styles from "./AppLayout.module.scss";
 import { PageActionsTarget } from "./PageActions";
@@ -20,6 +20,7 @@ export function AppLayout() {
   const [rightActionTarget, setRightActionTarget] = useState<HTMLDivElement | null>(null);
   const menuItems = [
     { path: "/", label: "我的服务", icon: flatColorAreaChartIcon },
+    { path: "/usage", label: "使用明细", icon: flatColorBarChartIcon },
     { path: "/harness/cursor", label: "Cursor 配置", icon: flatColorSettingsIcon },
     { path: "/calls", label: "本机调试记录", icon: flatColorSalesPerformanceIcon },
     { path: "/settings", label: "系统设置", icon: flatColorSettingsIcon },
@@ -35,7 +36,7 @@ export function AppLayout() {
       </nav>
     </Card>
     <main className={styles.content}>
-      {location.pathname !== "/" && <div className={styles.actionRegion}>
+      {!["/", "/usage"].includes(location.pathname) && <div className={styles.actionRegion}>
         <Card className={styles.actions}>
           <div ref={setLeftActionTarget} className={styles.pageActions} />
           {location.pathname !== "/" && <TooltipTrigger label={t("刷新")}><button className={controls.iconButton} aria-label={t("刷新")} disabled={busy} onClick={() => void appStore.refresh()}>

@@ -9,6 +9,7 @@ import { CallsPage } from "./features/calls/CallsPage";
 import { CallDetailsPage } from "./features/calls/CallDetailsPage";
 import { CursorSettingsPage } from "./features/models/CursorSettingsPage";
 import { GatewayPage } from "./features/gateway/GatewayPage";
+import { UsagePage } from "./features/usage/UsagePage";
 import { PluginManagementPage } from "./features/plugins/PluginManagementPage";
 import { SettingsPage } from "./features/settings/SettingsPage";
 import { useAppStore } from "./shared/store/appStore";
@@ -23,6 +24,7 @@ export function App() {
           <Route element={<AppFrame />}>
             <Route element={<AppLayout />}>
               <Route index element={<GatewayPage />} />
+              <Route path="usage" element={<UsagePage />} />
               <Route path="calls" element={<CallsPage />} />
               <Route path="harness/cursor" element={<CursorSettingsPage />} />
               <Route path="plugins" element={<PluginManagementPage />} />

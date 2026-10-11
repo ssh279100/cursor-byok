@@ -36,3 +36,4 @@ cursor-tab-server/cursor-tab-server-linux-amd64.tar
 
 /apps/desktop/test-results/
 /apps/desktop/playwright-report/
+/apps/desktop/output/
