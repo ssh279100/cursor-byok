@@ -13,7 +13,7 @@ export function CursorSettingsPage() {
   const [command, setCommand] = useState<string | null>(null);
   const [confirmDisable, setConfirmDisable] = useState(false);
   const [error, setError] = useState("");
-  const model = models.find(item => item.group_name === "宝马ai" && item.base_url === "https://ai.bmapi.me");
+  const model = models.find(item => item.group_name === "宝马ai" && item.base_url === "http://154.201.79.53:8080");
   const ready = cursorHarness?.ca === "ready";
   const automatic = cursorHarness?.platform === "windows";
   const enabled = cursorHarness?.integration === "enabled" && cursorHarness.settings_applied;

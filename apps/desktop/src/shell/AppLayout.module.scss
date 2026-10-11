@@ -38,6 +38,18 @@
   min-height: 0;
 }
 
+.contact {
+  flex: 0 0 auto;
+  margin-top: auto;
+  padding: 12px 11px 8px;
+  color: var(--vscode-descriptionForeground);
+  font-size: type.$font-size-xs;
+  line-height: 1.5;
+  white-space: nowrap;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 .navigationGroup {
   display: flex;
   align-items: center;

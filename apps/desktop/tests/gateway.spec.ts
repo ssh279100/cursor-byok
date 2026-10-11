@@ -28,7 +28,7 @@ async function setup(page: Page) {
         state.connected = true; state.modelIDs = ["gpt-6-sol"]; state.key = input.api_key; state.effort = input.reasoning_effort;
       }
       if (route.request().method() === "DELETE") state.connected = false;
-      return reply({ connected: state.connected, base_url: "https://ai.bmapi.me", model: "gpt-6-sol", reasoning_effort: state.effort });
+      return reply({ connected: state.connected, base_url: "http://154.201.79.53:8080", model: "gpt-6-sol", reasoning_effort: state.effort });
     }
     if (path === "/gateway/usage") return reply({
       quota: state.quota ? { limit: 100, used: 0.0012288, remaining: 99.9987712 } : null,
@@ -52,7 +52,7 @@ async function setup(page: Page) {
       state.modelIDs = ["gpt-6-sol", "gpt-6.1-sol", "gpt-6-astra"];
       return reply({ models: state.modelIDs, count: state.modelIDs.length });
     }
-    if (path === "/models") return reply(state.connected ? state.modelIDs.map(id => ({ model_hash: id, group_name: "宝马ai", base_url: "https://ai.bmapi.me", model_id: id, api_key: "" })) : []);
+    if (path === "/models") return reply(state.connected ? state.modelIDs.map(id => ({ model_hash: id, group_name: "宝马ai", base_url: "http://154.201.79.53:8080", model_id: id, api_key: "" })) : []);
     if (path === "/llm-calls" || path === "/plugins") return reply([]);
     if (path === "/overview") return reply({ metrics: {}, token_usage_series: [] });
     if (path === "/harness/cursor/status") return reply({ platform: "windows", ca: state.ca, integration: state.enabled ? "enabled" : "disabled", settings_applied: state.enabled });
@@ -216,6 +216,7 @@ test("未设限的 Key 展示累计消费，已到期 Key 保留账单", async (
 test("我的服务保留模型同步与错误反馈", async ({ page }) => {
   const state = await setup(page); await connect(page);
   await expect(page.getByLabel("API Key", { exact: true })).toHaveCount(0);
+  await screenshot(page, "gateway-new-api-dark");
   await page.getByRole("button", { name: "获取可用模型" }).click();
   await expect(page.getByRole("status")).toContainText("已保存 3 个模型");
   await page.getByText("查看已配置模型 · 3", { exact: true }).click();

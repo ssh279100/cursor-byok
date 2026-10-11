@@ -13,7 +13,7 @@ use crate::{
     Error, Result,
 };
 
-const BASE_URL: &str = "https://ai.bmapi.me";
+const BASE_URL: &str = "http://154.201.79.53:8080";
 const MODEL_ID: &str = "gpt-6-sol";
 const GROUP_NAME: &str = "宝马ai";
 

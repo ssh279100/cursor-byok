@@ -64,7 +64,7 @@ export function GatewayPage() {
     } catch (cause) { setModelError(failure(cause)); }
     finally { setSyncing(false); }
   }
-  const managedModels = models.filter(model => model.group_name === "宝马ai" && model.base_url === "https://ai.bmapi.me");
+  const managedModels = models.filter(model => model.group_name === "宝马ai" && model.base_url === "http://154.201.79.53:8080");
 
   return <div className={`${styles.page} ${styles.dashboard}`}>
     <header className={styles.heading}>
@@ -72,7 +72,7 @@ export function GatewayPage() {
       <Link className={styles.launchLink} to="/harness/cursor">启动 Cursor 服务 →</Link>
     </header>
     {status?.connected && <div className={styles.connectionBar}>
-      <span className={styles.connectionInfo}><span className={styles.liveDot} /> Key 已连接 <small>ai.bmapi.me · {managedModels.length} 个模型</small></span>
+      <span className={styles.connectionInfo}><span className={styles.liveDot} /> Key 已连接 <small>154.201.79.53:8080 · {managedModels.length} 个模型</small></span>
       <div className={styles.actions}>
         <Button disabled={busy || syncing} onClick={() => void syncModels()}>{syncing ? "正在获取…" : "获取可用模型"}</Button>
         <Button disabled={busy || syncing} aria-expanded={editing} aria-controls="key-settings" onClick={() => setEditing(value => !value)}>{editing ? "收起设置" : "Key 设置"}</Button>

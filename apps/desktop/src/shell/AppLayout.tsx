@@ -33,6 +33,7 @@ export function AppLayout() {
             <Icon icon={item.icon} size="1.3em" /><span>{item.label}</span>
           </NavLink>
         </div>)}
+        <div className={styles.contact}>QQ:279100273</div>
       </nav>
     </Card>
     <main className={styles.content}>
